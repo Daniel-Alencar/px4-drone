@@ -141,12 +141,10 @@ async def land(drone, label):
 # FUNÇÕES PRINCIPAIS DOS DRONES
 # ========================
 async def main_drone1():
-    global drone1
     drone1 = await connect_and_check("udp://:14541")
     await arm_takeoff(drone1, "Drone 1", CRUISE_ALT)
 
 async def main_drone2():
-    global drone2
     drone2 = await connect_and_check("udp://:14542")
     await arm_takeoff(drone2, "Drone 2", CRUISE_ALT)
 
@@ -160,14 +158,18 @@ async def move_drones_sequence():
         # passo a passo até ambos chegarem
         while not (arrived1 and arrived2):
             if pos1 and not arrived1:
+                drone1 = await connect_and_check("udp://:14541")
                 arrived1 = await move_step(1, drone1, *pos1, CRUISE_ALT)
             if pos2 and not arrived2:
+                drone2 = await connect_and_check("udp://:14542")
                 arrived2 = await move_step(2, drone2, *pos2, CRUISE_ALT)
 
 async def land_drone1():
+    drone1 = await connect_and_check("udp://:14541")
     await land(drone1, "Drone 1")
 
 async def land_drone2():
+    drone2 = await connect_and_check("udp://:14542")
     await land(drone2, "Drone 2")
 
 # ========================
@@ -176,7 +178,7 @@ async def land_drone2():
 if __name__ == "__main__":
     asyncio.run(main_drone1())
     asyncio.run(main_drone2())
-    asyncio.run(move_drones_sequence())
-    asyncio.run(asyncio.sleep(2))
+    # asyncio.run(move_drones_sequence())
+    asyncio.run(asyncio.sleep(10))
     asyncio.run(land_drone1())
     asyncio.run(land_drone2())

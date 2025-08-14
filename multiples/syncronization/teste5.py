@@ -29,7 +29,7 @@ LAT_STEP = 0.00001  # ~1.11 m
 LON_STEP = 0.00001  # ~1.11 m
 MIN_DISTANCE = 2.0   # metros
 STEP_SIZE = 0.000001 # tamanho de cada passo (~0.11 m)
-CRUISE_ALT = 15      # Altura de cruzeiro
+CRUISE_ALT = 3      # Altura de cruzeiro
 REFERENCE_LAT = None
 REFERENCE_LON = None
 

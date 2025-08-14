@@ -50,18 +50,13 @@ async def land(drone, label):
 
 
 # EXECUÇÕES
-async def main_drone1():
-    # Conecte aos drones nas portas apropriadas
+async def main_drones():
     drone1 = await connect_and_check("udp://:14541")
-
-    # Decola e pousa ambos simultaneamente
     await arm_takeoff(drone1, "Drone 1")
+    
+    await asyncio.sleep(10)
 
-async def main_drone2():
-    # Conecte aos drones nas portas apropriadas
     drone2 = await connect_and_check("udp://:14542")
-
-    # Decola e pousa ambos simultaneamente
     await arm_takeoff(drone2, "Drone 2")
 
 async def land_drone1():
@@ -77,8 +72,7 @@ async def land_drone2():
     await land(drone2, "Drone 2")
 
 if __name__ == "__main__":
-    asyncio.run(main_drone1())
-    asyncio.run(main_drone2())
+    asyncio.run(main_drones())
     asyncio.run(asyncio.sleep(10))
     asyncio.run(land_drone1())
     asyncio.run(land_drone2())
