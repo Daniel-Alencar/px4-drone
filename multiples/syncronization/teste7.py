@@ -23,11 +23,11 @@ MATRICES = [
     ]
 ]
 
-LAT_STEP = 0.00001  # ~1.11 m
-LON_STEP = 0.00001  # ~1.11 m
-MIN_DISTANCE = 2.0   # metros
-STEP_SIZE = 0.000001 # tamanho de cada passo (~0.11 m)
-CRUISE_ALT = 3      # altura de cruzeiro
+LAT_STEP = 0.00001    # ~1.11 m
+LON_STEP = 0.00001    # ~1.11 m
+MIN_DISTANCE = 2.0    # metros
+STEP_SIZE = 0.000001  # tamanho de cada passo (~0.11 m)
+CRUISE_ALT = 3        # altura de cruzeiro
 
 # Guarda posições de cada drone (drone_id -> (lat, lon, alt))
 drone_positions = {}
@@ -54,8 +54,8 @@ def haversine(lat1, lon1, lat2, lon2):
     a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
     return R * (2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)))
 
-async def connect_and_check(system_address):
-    drone = System()
+async def connect_and_check(system_address, grpc_port):
+    drone = System(port=grpc_port)
     await drone.connect(system_address=system_address)
     print(f"Conectando ao drone em {system_address}...")
     async for state in drone.core.connection_state():
@@ -141,11 +141,11 @@ async def land(drone, label):
 # FUNÇÕES PRINCIPAIS DOS DRONES
 # ========================
 async def main_drone1():
-    drone1 = await connect_and_check("udp://:14541")
+    drone1 = await connect_and_check("udp://:14541", 50051)
     await arm_takeoff(drone1, "Drone 1", CRUISE_ALT)
 
 async def main_drone2():
-    drone2 = await connect_and_check("udp://:14542")
+    drone2 = await connect_and_check("udp://:14542", 50052)
     await arm_takeoff(drone2, "Drone 2", CRUISE_ALT)
 
 async def move_drones_sequence():
@@ -158,18 +158,18 @@ async def move_drones_sequence():
         # passo a passo até ambos chegarem
         while not (arrived1 and arrived2):
             if pos1 and not arrived1:
-                drone1 = await connect_and_check("udp://:14541")
+                drone1 = await connect_and_check("udp://:14541", 50051)
                 arrived1 = await move_step(1, drone1, *pos1, CRUISE_ALT)
             if pos2 and not arrived2:
-                drone2 = await connect_and_check("udp://:14542")
+                drone2 = await connect_and_check("udp://:14542", 50052)
                 arrived2 = await move_step(2, drone2, *pos2, CRUISE_ALT)
 
 async def land_drone1():
-    drone1 = await connect_and_check("udp://:14541")
+    drone1 = await connect_and_check("udp://:14541", 50051)
     await land(drone1, "Drone 1")
 
 async def land_drone2():
-    drone2 = await connect_and_check("udp://:14542")
+    drone2 = await connect_and_check("udp://:14542", 50052)
     await land(drone2, "Drone 2")
 
 # ========================
@@ -178,7 +178,7 @@ async def land_drone2():
 if __name__ == "__main__":
     asyncio.run(main_drone1())
     asyncio.run(main_drone2())
-    # asyncio.run(move_drones_sequence())
+    asyncio.run(move_drones_sequence())
     asyncio.run(asyncio.sleep(10))
     asyncio.run(land_drone1())
     asyncio.run(land_drone2())

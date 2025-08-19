@@ -1,8 +1,8 @@
 import asyncio
 from mavsdk import System
 
-async def connect_and_check(system_address):
-    drone = System()
+async def connect_and_check(system_address, grpc_port):
+    drone = System(port=grpc_port)
     await drone.connect(system_address=system_address)
     print(f"[Drone 2] Conectando a {system_address}...")
     async for state in drone.core.connection_state():
@@ -36,7 +36,7 @@ async def land(drone):
             break
 
 async def main():
-    drone = await connect_and_check("udp://:14542")
+    drone = await connect_and_check("udp://:14542", 50052)
     input("Aperte ENTER quando quiser iniciar decolagem do Drone 2...")
     await arm_takeoff(drone)
     await asyncio.sleep(10)
