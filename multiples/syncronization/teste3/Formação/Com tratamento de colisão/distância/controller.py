@@ -17,11 +17,6 @@ grids = [
         [0, 0, 2],
     ],
     [
-        [0, 0, 2],
-        [0, 0, 0],
-        [1, 0, 0],
-    ],
-    [
         [2, 0, 0],
         [0, 0, 0],
         [0, 0, 1],
@@ -32,6 +27,26 @@ grids = [
         [2, 0, 0],
     ]
 ]
+
+import math
+
+def distancia(p1, p2):
+    """Calcula distância Euclidiana em 3D"""
+    return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2 + (p1[2]-p2[2])**2)
+
+def ajustar_offsets(offsets, min_dist):
+    """
+    Verifica se os offsets geram colisão (distância < min_dist).
+    Se sim, aumenta a altitude de um dos drones temporariamente.
+    """
+    o1 = offsets[1]
+    o2 = offsets[2]
+
+    if distancia(o1, o2) < min_dist:
+        print("⚠️ Distância muito curta entre drones! Ajustando altitude...")
+        # sobe o drone 2 um pouco
+        o2 = (o2[0], o2[1], o2[2] + 1.5)  # sobe 1.5m
+    return {1: o1, 2: o2}
 
 # -----------------------
 # Utilitários do worker
@@ -130,7 +145,7 @@ def drone_worker(system_address: str, label: str, grpc_port: int,
 # -----------------------
 # Função auxiliar para matriz
 # -----------------------
-def parse_grid(grid, cell_size=2, flight_alt=ALTITUDE):
+def parse_grid(grid, cell_size=1, flight_alt=ALTITUDE):
     """
     Converte matriz em deslocamentos relativos.
     Retorna dict {drone_id: (north, east, alt)}.
@@ -197,13 +212,16 @@ if __name__ == "__main__":
             ref_pos = msg[1]
 
     for grid in grids:
-        # --- Matriz de formação ---
+        # --- Matriz de formação com checagem de colisão ---
         offsets = parse_grid(grid)
+        offsets = ajustar_offsets(offsets, min_dist=5.0)
+
         # --- Move drones para offsets relativos ---
         print("\nMovendo drones para formação relativa\n")
         q1.put(("goto", (ref_pos, offsets[1])))
         q2.put(("goto", (ref_pos, offsets[2])))
         time.sleep(5)
+
 
     print("\n🛬 Pousando ambos!\n")
     q1.put(("land", None))
