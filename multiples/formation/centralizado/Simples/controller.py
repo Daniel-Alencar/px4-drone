@@ -17,14 +17,14 @@ grids = [
         [0, 0, 2],
     ],
     [
-        [2, 0, 0],
+        [0, 0, 2],
         [0, 0, 0],
-        [0, 0, 1],
+        [1, 0, 0],
     ],
     [
-        [0, 0, 1],
-        [0, 0, 0],
         [2, 0, 0],
+        [0, 0, 0],
+        [0, 0, 1],
     ]
 ]
 
@@ -146,68 +146,89 @@ def parse_grid(grid, cell_size=2, flight_alt=ALTITUDE):
 # -----------------------
 # Controlador
 # -----------------------
-
-
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
 
-    # Filas de comando e resposta
-    q1, q2 = mp.Queue(), mp.Queue()
-    r1, r2 = mp.Queue(), mp.Queue()
-    ready1, ready2 = mp.Event(), mp.Event()
-    start_both = mp.Event()
+    # Número de drones
+    n_drones = 5
 
-    DRONE1 = dict(system_address="udp://:14541", label="Drone 1", grpc_port=50051)
-    DRONE2 = dict(system_address="udp://:14542", label="Drone 2", grpc_port=50052)
+    # --- Criação das filas e eventos ---
+    queues_cmd = [mp.Queue() for _ in range(n_drones)]
+    queues_resp = [mp.Queue() for _ in range(n_drones)]
+    events_ready = [mp.Event() for _ in range(n_drones)]
+    start_all = mp.Event()
 
-    p1 = mp.Process(target=drone_worker, args=(
-        DRONE1["system_address"], DRONE1["label"], DRONE1["grpc_port"], q1, r1, ready1, start_both
-    ))
-    p2 = mp.Process(target=drone_worker, args=(
-        DRONE2["system_address"], DRONE2["label"], DRONE2["grpc_port"], q2, r2, ready2, start_both
-    ))
+    # --- Configuração dos drones ---
+    base_system_port = 14540
+    base_grpc_port = 50050
+    drones = [
+        dict(
+            system_address=f"udp://:{base_system_port + i + 1}",
+            label=f"Drone {i + 1}",
+            grpc_port=base_grpc_port + i + 1,
+        )
+        for i in range(n_drones)
+    ]
 
-    p1.start()
-    p2.start()
+    # --- Criação e inicialização dos processos ---
+    processes = []
+    for i, drone in enumerate(drones):
+        p = mp.Process(
+            target=drone_worker,
+            args=(
+                drone["system_address"],
+                drone["label"],
+                drone["grpc_port"],
+                queues_cmd[i],
+                queues_resp[i],
+                events_ready[i],
+                start_all,
+            ),
+        )
+        p.start()
+        processes.append(p)
 
     print("⌛ Aguardando drones ficarem prontos...")
-    ready1.wait()
-    ready2.wait()
+    for ev in events_ready:
+        ev.wait()
 
     # --- Decolagem simultânea ---
     print("\n🚀 Iniciando decolagem conjunta!\n")
-    q1.put(("takeoff", ALTITUDE))
-    q2.put(("takeoff", ALTITUDE))
+    for q in queues_cmd:
+        q.put(("takeoff", ALTITUDE))
     time.sleep(0.5)
-    start_both.set()
+    start_all.set()
 
     # --- Define posição de referência ---
     print("\n📍 Pegando posição de referência do Drone 1\n")
+    q1, r1 = queues_cmd[0], queues_resp[0]
+    q2, r2 = queues_cmd[1], queues_resp[1]  # Apenas drone 1 e 2 usados abaixo
+
     q1.put(("getpos", None))
     ref_pos = None
     while ref_pos is None:
-        # pega da fila de resposta
         msg = r1.get()
         if msg[0] == "pos_result":
             ref_pos = msg[1]
 
+    # --- Movimentação em formação (apenas drones 1 e 2) ---
     for grid in grids:
-        # --- Matriz de formação ---
         offsets = parse_grid(grid)
-        # --- Move drones para offsets relativos ---
         print("\nMovendo drones para formação relativa\n")
         q1.put(("goto", (ref_pos, offsets[1])))
         q2.put(("goto", (ref_pos, offsets[2])))
         time.sleep(5)
 
-    print("\n🛬 Pousando ambos!\n")
-    q1.put(("land", None))
-    q2.put(("land", None))
+    # --- Pouso e finalização ---
+    print("\n🛬 Pousando!\n")
+    for q in queues_cmd:
+        q.put(("land", None))
 
     time.sleep(5)
-    q1.put(("exit", None))
-    q2.put(("exit", None))
+    for q in queues_cmd:
+        q.put(("exit", None))
 
-    p1.join()
-    p2.join()
+    for p in processes:
+        p.join()
+
     print("✅ Missão finalizada.")
