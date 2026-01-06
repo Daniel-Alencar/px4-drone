@@ -1,5 +1,5 @@
 <sdf version='1.9'>
-  <world name='bouncing_world'>
+  <world name='bouncing_world/bouncing_world'>
     <physics type="ode">
       <max_step_size>0.001</max_step_size>
       <real_time_factor>1</real_time_factor>
