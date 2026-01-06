@@ -3,7 +3,8 @@ Panels:
     Help Height: 78
     Name: Displays
     Property Tree Widget:
-      Expanded: ~
+      Expanded:
+        - /Image1
       Splitter Ratio: 0.5
     Tree Height: 232
   - Class: rviz_common/Selection
@@ -57,7 +58,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /world/bouncing_world/bouncing_world/model/x500_mono_cam_down_0/link/camera_link/sensor/imager/image
+        Value: /camera
       Value: true
     - Class: rviz_default_plugins/Camera
       Enabled: false

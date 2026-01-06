@@ -18,7 +18,7 @@ class ColorTunerNode(Node):
         # Tópico original longo que você estava usando
         self.subscription = self.create_subscription(
             Image,
-            '/world/default/model/x500_mono_cam_down_0/link/camera_link/sensor/imager/image',
+            '/camera',
             self.image_callback,
             10)
             
