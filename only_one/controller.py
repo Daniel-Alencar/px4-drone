@@ -33,7 +33,7 @@ async def arm_takeoff_land(drone, label):
     
     print(f"🚀 [{label}] Decolando...")
     await drone.action.takeoff()
-    await asyncio.sleep(5)  # Tempo no ar
+    await asyncio.sleep(15)  # Tempo no ar
 
     print(f"🛬 [{label}] Pousando...")
     await drone.action.land()
@@ -48,7 +48,7 @@ async def arm_takeoff_land(drone, label):
 
 async def main():
     # Conecte aos drones nas portas apropriadas
-    drone1 = await connect_and_check("udp://:14541")
+    drone1 = await connect_and_check("udp://:14540")
 
     # Decola e pousa ambos simultaneamente
     await asyncio.gather(

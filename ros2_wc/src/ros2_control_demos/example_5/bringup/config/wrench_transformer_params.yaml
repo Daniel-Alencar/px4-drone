@@ -1,6 +1,0 @@
-fts_wrench_transformer:
-  ros__parameters:
-    target_frames:
-    - "base_link"
-    - "link1"
-    tf_timeout: 0.1
