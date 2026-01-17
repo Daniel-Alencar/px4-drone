@@ -174,7 +174,7 @@ nav2-simple-commander==1.0.0
 netifaces==0.11.0
 nose2==0.9.2
 notify2==0.3
-numpy==2.2.6
+numpy==1.26.4
 nunavut==2.3.1
 oauthlib==3.2.0
 olefile==0.46
