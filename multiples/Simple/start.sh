@@ -10,7 +10,7 @@ pkill gzserver
 # Configurações iniciais
 num_vehicles=2
 # Modelo do drone (x500 é padrão para Gazebo Garden/Harmonic)
-model="gz_x500_mono_can" 
+model="gz_x500_mono_cam" 
 
 # Loop para iniciar cada drone
 for ((i=0; i<num_vehicles; i++)); do

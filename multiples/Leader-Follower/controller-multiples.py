@@ -11,7 +11,7 @@ from mavsdk.offboard import OffboardError, VelocityNedYaw, PositionNedYaw
 # -----------------------
 ALTITUDE = 10.0
 KP = 1.0  # Ganho Proporcional
-NUM_DRONES = 2
+NUM_DRONES = 5
 
 # -----------------------
 # Definição da Formação (Geometria em V)
