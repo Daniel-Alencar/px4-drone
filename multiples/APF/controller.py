@@ -1,0 +1,221 @@
+import multiprocessing as mp
+import asyncio
+import time
+import math
+import numpy as np
+from mavsdk import System
+
+# -----------------------
+# Configurações do APF
+# -----------------------
+NUM_DRONES = 3
+ALTITUDE = 10.0
+
+# Ganhos do Campo de Potencial (Baseados nas equações do TCC)
+K_ATT = 1.0     # Força de atração para o objetivo
+K_REP = 150.0   # Força de repulsão (obstáculos e outros drones)
+D_OBS = 8.0     # Distância de influência d0 (só sofre repulsão se chegar mais perto que isso)
+MAX_STEP = 3.0  # Tamanho máximo do "passo" em metros por iteração (limita a velocidade)
+
+# Obstáculos Virtuais no plano NED (Norte, Leste)
+# Vamos colocar um obstáculo no meio do caminho (20m para frente, 0m para os lados)
+OBSTACULOS_ESTATICOS = [
+    np.array([20.0, 0.0])
+]
+
+# -----------------------
+# Funções Matemáticas e Conversões GPS <-> NED
+# -----------------------
+EARTH_RADIUS = 6378137.0
+
+def gps_to_ned(lat, lon, ref_lat, ref_lon):
+    """ Converte Lat/Lon para coordenadas locais em metros (Norte, Leste) """
+    lat_rad, lon_rad = math.radians(lat), math.radians(lon)
+    ref_lat_rad, ref_lon_rad = math.radians(ref_lat), math.radians(ref_lon)
+    
+    n = (lat_rad - ref_lat_rad) * EARTH_RADIUS
+    e = (lon_rad - ref_lon_rad) * EARTH_RADIUS * math.cos(ref_lat_rad)
+    return np.array([n, e])
+
+def ned_to_gps(n, e, ref_lat, ref_lon):
+    """ Converte coordenadas locais em metros (Norte, Leste) para Lat/Lon """
+    ref_lat_rad = math.radians(ref_lat)
+    
+    d_lat = n / EARTH_RADIUS
+    d_lon = e / (EARTH_RADIUS * math.cos(ref_lat_rad))
+    
+    new_lat = ref_lat + math.degrees(d_lat)
+    new_lon = ref_lon + math.degrees(d_lon)
+    return new_lat, new_lon
+
+def calcular_forcas_apf(pos_atual, pos_objetivo, outras_posicoes, obstaculos):
+    """
+    Implementação das Equações 24, 25 e 26 do TCC
+    """
+    # 1. Força de Atração: f_att = -k_att * (p_i - p_goal) -> ou k_att * (p_goal - p_i)
+    # Aponta do drone para o objetivo
+    f_att = K_ATT * (pos_objetivo - pos_atual)
+    
+    f_rep = np.array([0.0, 0.0])
+    
+    # Lista de tudo que causa repulsão (Outros drones + Obstáculos Estáticos)
+    elementos_repulsivos = outras_posicoes + obstaculos
+    
+    for p_obs in elementos_repulsivos:
+        vetor_distancia = pos_atual - p_obs
+        distancia = np.linalg.norm(vetor_distancia)
+        
+        # Só aplica repulsão se estiver dentro do raio de influência d0
+        if 0.1 < distancia < D_OBS: # Evita divisão por zero com 0.1
+            # 2. Força de Repulsão (Equação 25/27 do TCC)
+            # f_rep = k_rep * (1/d - 1/d0) * (1/d^3) * (p_i - p_obs)
+            termo1 = (1.0 / distancia) - (1.0 / D_OBS)
+            termo2 = 1.0 / (distancia**3)
+            forca = K_REP * termo1 * termo2 * vetor_distancia
+            f_rep += forca
+
+    # 3. Força Resultante (Gradiente Negativo Total)
+    f_total = f_att + f_rep
+    
+    # Normalização/Clamping para garantir que o drone não tente dar um salto de 50 metros
+    norma_f = np.linalg.norm(f_total)
+    if norma_f > MAX_STEP:
+        f_total = (f_total / norma_f) * MAX_STEP
+        
+    return f_total
+
+# -----------------------
+# Funções do MAVSDK (Worker)
+# -----------------------
+async def worker_setup(sys_addr, label, grpc_port):
+    drone = System(port=grpc_port)
+    await drone.connect(system_address=sys_addr)
+    async for state in drone.core.connection_state():
+        if state.is_connected: break
+    async for health in drone.telemetry.health():
+        if health.is_global_position_ok: break
+    return drone
+
+async def worker_loop(drone_id, sys_addr, grpc_port, cmd_queue, resp_queue, ready_evt, start_evt):
+    label = f"Drone {drone_id}"
+    drone = await worker_setup(sys_addr, label, grpc_port)
+    ready_evt.set()
+
+    while True:
+        cmd = cmd_queue.get()
+        if cmd[0] == "takeoff":
+            start_evt.wait()
+            await drone.action.arm()
+            await drone.action.set_takeoff_altitude(cmd[1])
+            await drone.action.takeoff()
+        elif cmd[0] == "getpos":
+            async for pos in drone.telemetry.position():
+                resp_queue.put(("pos_result", (pos.latitude_deg, pos.longitude_deg, pos.absolute_altitude_m)))
+                break
+        elif cmd[0] == "goto":
+            lat, lon, alt = cmd[1]
+            await drone.action.goto_location(lat, lon, alt, 0)
+        elif cmd[0] == "land":
+            await drone.action.land()
+        elif cmd[0] == "exit":
+            break
+
+def process_runner(*args):
+    asyncio.run(worker_loop(*args))
+
+# -----------------------
+# Controlador Principal APF
+# -----------------------
+if __name__ == "__main__":
+    mp.set_start_method("spawn", force=True)
+    
+    queues_cmd = [mp.Queue() for _ in range(NUM_DRONES)]
+    queues_resp = [mp.Queue() for _ in range(NUM_DRONES)]
+    events_ready = [mp.Event() for _ in range(NUM_DRONES)]
+    start_all = mp.Event()
+
+    print("--- Inicializando Arquitetura APF ---")
+    processes = []
+    for i in range(NUM_DRONES):
+        p = mp.Process(target=process_runner, args=(i, f"udp://:{14540+i}", 50050+i, queues_cmd[i], queues_resp[i], events_ready[i], start_all))
+        p.start()
+        processes.append(p)
+
+    for ev in events_ready: ev.wait()
+
+    print("\n🚀 Decolando enxame...")
+    for q in queues_cmd: q.put(("takeoff", ALTITUDE))
+    start_all.set()
+    time.sleep(15) 
+
+    # --- Pegar Posição de Referência (Origem do Plano Cartesiano Local) ---
+    queues_cmd[0].put(("getpos", None))
+    ref_lat, ref_lon, _ = queues_resp[0].get()[1]
+    
+    # Define os objetivos finais (p_goal) de cada drone no plano NED (Norte, Leste)
+    # Todos vão 40 metros para frente, mas mantendo um espaçamento lateral desejado
+    objetivos_ned = {
+        0: np.array([40.0, 0.0]),   # Centro
+        1: np.array([40.0, 5.0]),   # Direita
+        2: np.array([40.0, -5.0])   # Esquerda
+    }
+
+    print("\n🏁 INICIANDO NAVEGAÇÃO POR CAMPOS POTENCIAIS (APF)")
+    print(f"⚠️  Atenção: Obstáculo invisível colocado em N={OBSTACULOS_ESTATICOS[0][0]}m, E={OBSTACULOS_ESTATICOS[0][1]}m")
+
+    # Loop de Controle (Roda até que todos os drones cheguem perto do alvo)
+    chegaram = [False] * NUM_DRONES
+    
+    while not all(chegaram):
+        posicoes_atuais_ned = {}
+        
+        # 1. Obter a posição GPS atual de todos e converter para NED (metros)
+        for i in range(NUM_DRONES):
+            queues_cmd[i].put(("getpos", None))
+            # Esvazia lixo da fila
+            while queues_resp[i].qsize() > 1: queues_resp[i].get_nowait()
+            
+            lat, lon, _ = queues_resp[i].get()[1]
+            posicoes_atuais_ned[i] = gps_to_ned(lat, lon, ref_lat, ref_lon)
+            
+            # Verifica se chegou no objetivo (Margem de erro de 1.5 metros)
+            dist_ao_alvo = np.linalg.norm(objetivos_ned[i] - posicoes_atuais_ned[i])
+            if dist_ao_alvo < 1.5:
+                chegaram[i] = True
+
+        # 2. Calcular Campos de Potencial e Atualizar Setpoints
+        for i in range(NUM_DRONES):
+            if chegaram[i]:
+                continue # Se chegou, fica parado
+                
+            p_i = posicoes_atuais_ned[i]
+            p_goal = objetivos_ned[i]
+            
+            # Lista de posições dos OUTROS drones (para repulsão mútua)
+            outros_drones = [posicoes_atuais_ned[j] for j in range(NUM_DRONES) if j != i]
+            
+            # Calcula o Vetor Resultante usando a modelagem do TCC
+            forca_resultante = calcular_forcas_apf(p_i, p_goal, outros_drones, OBSTACULOS_ESTATICOS)
+            
+            # O próximo waypoint é a posição atual + o passo do gradiente de força
+            proxima_pos_ned = p_i + forca_resultante
+            
+            # Converte de volta para Lat/Lon
+            prox_lat, prox_lon = ned_to_gps(proxima_pos_ned[0], proxima_pos_ned[1], ref_lat, ref_lon)
+            
+            # Envia comando MAVSDK
+            queues_cmd[i].put(("goto", (prox_lat, prox_lon, ALTITUDE)))
+            
+            print(f"Drone {i} | Pos: ({p_i[0]:.1f}, {p_i[1]:.1f}) | Força: ({forca_resultante[0]:.2f}, {forca_resultante[1]:.2f})")
+
+        print("-" * 40)
+        # Atualiza a 2Hz
+        time.sleep(0.5)
+
+    print("\n✅ Todos os drones alcançaram seus objetivos desviando do obstáculo!")
+    
+    print("🛬 Pousando...")
+    for q in queues_cmd: q.put(("land", None))
+    time.sleep(10)
+    for q in queues_cmd: q.put(("exit", None))
+    for p in processes: p.terminate()
