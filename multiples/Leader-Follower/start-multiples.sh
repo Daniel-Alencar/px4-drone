@@ -8,7 +8,7 @@ pkill gzclient
 pkill gzserver
 
 # Configurações iniciais
-num_vehicles=5
+num_vehicles=8
 # Modelo do drone (x500 é padrão para Gazebo Garden/Harmonic)
 model="gz_x500" 
 
@@ -45,7 +45,7 @@ for ((i=0; i<num_vehicles; i++)); do
     if [ "$i" -eq 0 ]; then
         sleep 20
     else
-        sleep 20
+        sleep 5
     fi
 done
 
