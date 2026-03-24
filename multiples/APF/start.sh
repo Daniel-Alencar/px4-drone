@@ -8,31 +8,44 @@ pkill gzclient
 pkill gzserver
 
 # Configurações iniciais
-num_vehicles=3
+num_vehicles=10
 # Modelo do drone (x500 é padrão para Gazebo Garden/Harmonic)
 model="gz_x500" 
 
 # Mundo do Gazebo desejado
 world="APF_world"
 
+# --- CONFIGURAÇÕES DO GRID ---
+cols=4       # Número de drones por linha
+spacing=2    # Distância em metros entre os drones
+
 # Loop para iniciar cada drone
 for ((i=0; i<num_vehicles; i++)); do
     
     # Define portas baseadas no ID da instância (0, 1, 2, 3, 4)
-    # MAVSDK port: 14540 + i (ex: 14540, 14541...)
     mavsdk_port=$((14540 + i))
-    
-    # QGC port: 14550 + i
     qgc_port=$((14550 + i))
-    
-    # Porta interna do simulador
     sim_port=$((4560 + i))
 
-    # Posição inicial (Y varia para ficarem em linha)
-    y_pos=$((i * 2)) 
-    pose="0,$y_pos"
+    # --- CÁLCULO DA POSIÇÃO NO GRID ---
+    # Linha atual: divisão inteira de i pelo número de colunas
+    row=$((i / cols))
+    
+    # Coluna atual: resto da divisão de i pelo número de colunas
+    col=$((i % cols))
 
-    echo "Iniciando Drone $i | MAVSDK: $mavsdk_port | Pose: $pose"
+    # Posição X (Frente/Trás) baseada na linha
+    # Multiplicamos por -1 para que as novas linhas nasçam atrás da primeira,
+    # e não na frente (onde já estariam os primeiros drones).
+    x_pos=$((row * spacing * -1))
+    
+    # Posição Y (Esquerda/Direita) baseada na coluna
+    y_pos=$((col * spacing)) 
+    
+    # Monta a pose final (Z e ângulos ficam em 0 por padrão se omitidos, ou pode colocar "X,Y,0,0,0,0")
+    pose="$x_pos,$y_pos"
+
+    echo "Iniciando Drone $i | MAVSDK: $mavsdk_port | Pose X,Y: $pose"
 
     # Comando de inicialização (em background usando &)
     PX4_SYS_AUTOSTART=4001 \
