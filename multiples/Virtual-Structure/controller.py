@@ -7,7 +7,7 @@ from mavsdk import System
 # -----------------------
 # Configurações do Enxame
 # -----------------------
-NUM_DRONES = 5
+NUM_DRONES = 8
 ALTITUDE = 15.0
 
 # Define a geometria da "Estrutura Virtual" (r_i^{VS})

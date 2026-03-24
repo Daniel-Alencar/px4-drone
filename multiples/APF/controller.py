@@ -12,72 +12,103 @@ NUM_DRONES = 3
 ALTITUDE = 10.0
 
 # Ganhos do Campo de Potencial (Baseados nas equações do TCC)
-K_ATT = 1.0     # Força de atração para o objetivo
-K_REP = 150.0   # Força de repulsão (obstáculos e outros drones)
-D_OBS = 8.0     # Distância de influência d0 (só sofre repulsão se chegar mais perto que isso)
-MAX_STEP = 3.0  # Tamanho máximo do "passo" em metros por iteração (limita a velocidade)
+# Ganhos do Campo de Potencial Balanceados
+K_ATT = 5.0      # Agora puxa com força constante de 2.0
+K_REP = 500.0    # Empurra muito forte quando chega perto
+D_OBS = 3.0      # Raio de influência (metros)
+MAX_STEP = 1.0   # Passo máximo (suaviza o movimento)
 
 # Obstáculos Virtuais no plano NED (Norte, Leste)
 # Vamos colocar um obstáculo no meio do caminho (20m para frente, 0m para os lados)
 OBSTACULOS_ESTATICOS = [
-    np.array([20.0, 0.0])
+    np.array([20.0, 0.0]),
+    np.array([20.0, 7.0]),
+    np.array([20.0, -7.0]),
+    np.array([24.0, 3.5]),
+    np.array([24.0, -3.5]),
+    np.array([24.0, 10.5]),
+    np.array([24.0, -10.5]),
+    np.array([28.0, 0.0]),
+    np.array([28.0, 7.0]),
+    np.array([28.0, -7.0])
 ]
 
 # -----------------------
 # Funções Matemáticas e Conversões GPS <-> NED
 # -----------------------
-EARTH_RADIUS = 6378137.0
+# -----------------------
+# Coordenadas Absolutas do Gazebo (Origem X=0, Y=0)
+# Extraídas exatamente do seu arquivo APF_world.sdf
+# -----------------------
+REF_LAT = 47.397971057728974
+REF_LON = 8.5461637398001464
 
-def gps_to_ned(lat, lon, ref_lat, ref_lon):
-    """ Converte Lat/Lon para coordenadas locais em metros (Norte, Leste) """
+# Raio médio volumétrico da Terra em metros
+EARTH_RADIUS = 6371000.0 
+
+def gps_to_ned(lat, lon):
+    """ Converte Lat/Lon do Drone para Metros (N, E) a partir do centro do Gazebo """
     lat_rad, lon_rad = math.radians(lat), math.radians(lon)
-    ref_lat_rad, ref_lon_rad = math.radians(ref_lat), math.radians(ref_lon)
+    ref_lat_rad, ref_lon_rad = math.radians(REF_LAT), math.radians(REF_LON)
     
     n = (lat_rad - ref_lat_rad) * EARTH_RADIUS
     e = (lon_rad - ref_lon_rad) * EARTH_RADIUS * math.cos(ref_lat_rad)
     return np.array([n, e])
 
-def ned_to_gps(n, e, ref_lat, ref_lon):
-    """ Converte coordenadas locais em metros (Norte, Leste) para Lat/Lon """
-    ref_lat_rad = math.radians(ref_lat)
+def ned_to_gps(n, e):
+    """ Converte Metros (N, E) para Lat/Lon exato para o MAVSDK """
+    ref_lat_rad = math.radians(REF_LAT)
     
     d_lat = n / EARTH_RADIUS
     d_lon = e / (EARTH_RADIUS * math.cos(ref_lat_rad))
     
-    new_lat = ref_lat + math.degrees(d_lat)
-    new_lon = ref_lon + math.degrees(d_lon)
+    new_lat = REF_LAT + math.degrees(d_lat)
+    new_lon = REF_LON + math.degrees(d_lon)
     return new_lat, new_lon
 
 def calcular_forcas_apf(pos_atual, pos_objetivo, outras_posicoes, obstaculos):
-    """
-    Implementação das Equações 24, 25 e 26 do TCC
-    """
-    # 1. Força de Atração: f_att = -k_att * (p_i - p_goal) -> ou k_att * (p_goal - p_i)
-    # Aponta do drone para o objetivo
-    f_att = K_ATT * (pos_objetivo - pos_atual)
+    # 1. Força de Atração Constante (Potencial Cônico)
+    vetor_atracao = pos_objetivo - pos_atual
+    distancia_alvo = np.linalg.norm(vetor_atracao)
     
+    if distancia_alvo > 0.1:
+        f_att = K_ATT * (vetor_atracao / distancia_alvo)
+    else:
+        f_att = np.array([0.0, 0.0])
+        
     f_rep = np.array([0.0, 0.0])
     
-    # Lista de tudo que causa repulsão (Outros drones + Obstáculos Estáticos)
-    elementos_repulsivos = outras_posicoes + obstaculos
-    
-    for p_obs in elementos_repulsivos:
+    # 2. Repulsão dos OBSTÁCULOS (Bolha Grande de Proteção: D_OBS)
+    for p_obs in obstaculos:
         vetor_distancia = pos_atual - p_obs
+        
+        # Truque da Colinearidade
+        if abs(vetor_distancia[1]) < 0.2 and abs(vetor_distancia[0]) > 0:
+            vetor_distancia[1] += 0.5
+            
         distancia = np.linalg.norm(vetor_distancia)
         
-        # Só aplica repulsão se estiver dentro do raio de influência d0
-        if 0.1 < distancia < D_OBS: # Evita divisão por zero com 0.1
-            # 2. Força de Repulsão (Equação 25/27 do TCC)
-            # f_rep = k_rep * (1/d - 1/d0) * (1/d^3) * (p_i - p_obs)
+        if 0.1 < distancia < D_OBS: 
             termo1 = (1.0 / distancia) - (1.0 / D_OBS)
             termo2 = 1.0 / (distancia**3)
-            forca = K_REP * termo1 * termo2 * vetor_distancia
-            f_rep += forca
+            f_rep += K_REP * termo1 * termo2 * vetor_distancia
 
-    # 3. Força Resultante (Gradiente Negativo Total)
+    # 3. Repulsão dos OUTROS DRONES (Bolha Pequena de Formação: 2.5m)
+    D_DRONE = 2.5 
+    for p_drone in outras_posicoes:
+        vetor_distancia = pos_atual - p_drone
+        distancia = np.linalg.norm(vetor_distancia)
+        
+        if 0.1 < distancia < D_DRONE: 
+            termo1 = (1.0 / distancia) - (1.0 / D_DRONE)
+            termo2 = 1.0 / (distancia**3)
+            # Usamos uma força um pouco menor entre drones para não gerar "coices"
+            f_rep += (K_REP * 0.5) * termo1 * termo2 * vetor_distancia
+
+    # 4. Força Resultante
     f_total = f_att + f_rep
     
-    # Normalização/Clamping para garantir que o drone não tente dar um salto de 50 metros
+    # Limita o passo máximo
     norma_f = np.linalg.norm(f_total)
     if norma_f > MAX_STEP:
         f_total = (f_total / norma_f) * MAX_STEP
@@ -149,15 +180,15 @@ if __name__ == "__main__":
     time.sleep(15) 
 
     # --- Pegar Posição de Referência (Origem do Plano Cartesiano Local) ---
-    queues_cmd[0].put(("getpos", None))
-    ref_lat, ref_lon, _ = queues_resp[0].get()[1]
+    # queues_cmd[0].put(("getpos", None))
+    # ref_lat, ref_lon, _ = queues_resp[0].get()[1]
     
     # Define os objetivos finais (p_goal) de cada drone no plano NED (Norte, Leste)
     # Todos vão 40 metros para frente, mas mantendo um espaçamento lateral desejado
     objetivos_ned = {
-        0: np.array([40.0, 0.0]),   # Centro
-        1: np.array([40.0, 5.0]),   # Direita
-        2: np.array([40.0, -5.0])   # Esquerda
+        0: np.array([40.0, 0.0]),   
+        1: np.array([40.0, 2.0]),   
+        2: np.array([40.0, 4.0])    
     }
 
     print("\n🏁 INICIANDO NAVEGAÇÃO POR CAMPOS POTENCIAIS (APF)")
@@ -176,7 +207,7 @@ if __name__ == "__main__":
             while queues_resp[i].qsize() > 1: queues_resp[i].get_nowait()
             
             lat, lon, _ = queues_resp[i].get()[1]
-            posicoes_atuais_ned[i] = gps_to_ned(lat, lon, ref_lat, ref_lon)
+            posicoes_atuais_ned[i] = gps_to_ned(lat, lon)
             
             # Verifica se chegou no objetivo (Margem de erro de 1.5 metros)
             dist_ao_alvo = np.linalg.norm(objetivos_ned[i] - posicoes_atuais_ned[i])
@@ -201,7 +232,7 @@ if __name__ == "__main__":
             proxima_pos_ned = p_i + forca_resultante
             
             # Converte de volta para Lat/Lon
-            prox_lat, prox_lon = ned_to_gps(proxima_pos_ned[0], proxima_pos_ned[1], ref_lat, ref_lon)
+            prox_lat, prox_lon = ned_to_gps(proxima_pos_ned[0], proxima_pos_ned[1])
             
             # Envia comando MAVSDK
             queues_cmd[i].put(("goto", (prox_lat, prox_lon, ALTITUDE)))
