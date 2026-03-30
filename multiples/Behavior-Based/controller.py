@@ -11,32 +11,53 @@ from mavsdk import System
 NUM_DRONES = 3
 ALTITUDE = 12.0
 
-# Pesos dos Comportamentos (Equação 10 do TCC)
-# Ajustar esses valores muda completamente a "personalidade" do enxame
-W_SEP = 8.0   # w_s: Peso da Separação (Evita colisões)
-W_COH = 0.5   # w_c: Peso da Coesão (Mantém o grupo unido)
-W_ALI = 1.0   # w_a: Peso do Alinhamento (Sincroniza velocidades)
-W_GOAL = 1.5  # w_g: Peso da Busca por Objetivo (Atração ao alvo)
+NUM_DRONES = 3
+ALTITUDE = 12.0
 
-MAX_STEP = 3.5  # Limita o tamanho do "passo" a cada iteração (metros)
+# Novos Pesos: O Efeito Funil Resolvido
+W_SEP = 15.0   # AUMENTADO: Respeito máximo pelo espaço do colega!
+W_OBS = 15.0   # Mantido: Medo da parede igual ao medo de bater no amigo
+W_COH = 0.1    # REDUZIDO: Relaxa a vontade de andar grudado na hora do aperto
+W_ALI = 2.0    # AUMENTADO: Se um acelerar para desviar, o outro acompanha
+W_GOAL = 5.0   # Mantido: Vontade de ir para a frente
+
+MAX_STEP = 1.0        # Passos curtos para reflexos rápidos
+RAIO_CILINDRO = 1.5   
+RAIO_VISAO_OBS = 3.0
+
+# Obstáculos Virtuais no plano NED (Norte, Leste)
+OBSTACULOS_ESTATICOS = [
+    np.array([20.0, 0.0]),
+    np.array([20.0, 7.0]),
+    np.array([20.0, -7.0]),
+    np.array([24.0, 3.5]),
+    np.array([24.0, -3.5]),
+    np.array([24.0, 10.5]),
+    np.array([24.0, -10.5]),
+    np.array([28.0, 0.0]),
+    np.array([28.0, 7.0]),
+    np.array([28.0, -7.0])
+]
 
 # -----------------------
-# Funções Matemáticas / GPS
+# Coordenadas Absolutas do Gazebo
 # -----------------------
-EARTH_RADIUS = 6378137.0
+REF_LAT = 47.397971057728974
+REF_LON = 8.5461637398001464
+EARTH_RADIUS = 6371000.0 
 
-def gps_to_ned(lat, lon, ref_lat, ref_lon):
+def gps_to_ned(lat, lon):
     lat_rad, lon_rad = math.radians(lat), math.radians(lon)
-    ref_lat_rad, ref_lon_rad = math.radians(ref_lat), math.radians(ref_lon)
+    ref_lat_rad, ref_lon_rad = math.radians(REF_LAT), math.radians(REF_LON)
     n = (lat_rad - ref_lat_rad) * EARTH_RADIUS
     e = (lon_rad - ref_lon_rad) * EARTH_RADIUS * math.cos(ref_lat_rad)
     return np.array([n, e])
 
-def ned_to_gps(n, e, ref_lat, ref_lon):
-    ref_lat_rad = math.radians(ref_lat)
+def ned_to_gps(n, e):
+    ref_lat_rad = math.radians(REF_LAT)
     d_lat = n / EARTH_RADIUS
     d_lon = e / (EARTH_RADIUS * math.cos(ref_lat_rad))
-    return ref_lat + math.degrees(d_lat), ref_lon + math.degrees(d_lon)
+    return REF_LAT + math.degrees(d_lat), REF_LON + math.degrees(d_lon)
 
 # -----------------------
 # Funções do MAVSDK (Worker)
@@ -64,19 +85,14 @@ async def worker_loop(drone_id, sys_addr, grpc_port, cmd_queue, resp_queue, read
             await drone.action.takeoff()
             
         elif cmd[0] == "get_state":
-            # Para o Behavior-Based, precisamos da posição (para Coesão/Separação) 
-            # e da velocidade (para o Alinhamento)
             lat, lon, alt = 0, 0, 0
             vn, ve = 0, 0
-            
             async for pos in drone.telemetry.position():
                 lat, lon, alt = pos.latitude_deg, pos.longitude_deg, pos.absolute_altitude_m
                 break
-                
             async for vel in drone.telemetry.velocity_ned():
                 vn, ve = vel.north_m_s, vel.east_m_s
                 break
-                
             resp_queue.put(("state_result", (lat, lon, alt, vn, ve)))
             
         elif cmd[0] == "goto":
@@ -103,7 +119,7 @@ if __name__ == "__main__":
     events_ready = [mp.Event() for _ in range(NUM_DRONES)]
     start_all = mp.Event()
 
-    print("--- Inicializando Arquitetura Behavior-Based (Bando de Aves) ---")
+    print("--- Inicializando Arquitetura Behavior-Based com Obstáculos ---")
     processes = []
     for i in range(NUM_DRONES):
         p = mp.Process(target=process_runner, args=(i, f"udp://:{14540+i}", 50050+i, queues_cmd[i], queues_resp[i], events_ready[i], start_all))
@@ -117,21 +133,17 @@ if __name__ == "__main__":
     start_all.set()
     time.sleep(15)
 
-    # Pegar Referência GPS
-    queues_cmd[0].put(("get_state", None))
-    ref_lat, ref_lon, _, _, _ = queues_resp[0].get()[1]
-
-    # Define o Objetivo Global (p_goal) para onde o bando deve migrar (Ex: 50m ao Norte)
+    # Define o Objetivo Global (p_goal) para onde o bando deve migrar (50m ao Norte)
     P_GOAL = np.array([50.0, 0.0])
 
     print("\n🦅 INICIANDO COMPORTAMENTO DE BANDO")
-    print(f"Objetivo: Voar para N={P_GOAL[0]}m. O enxame se auto-organizará no caminho.")
+    print(f"Objetivo: N={P_GOAL[0]}m. O enxame vai fluir pelos obstáculos.")
 
     # Loop de Controle
     chegaram = False
     
     while not chegaram:
-        estados = {} # Guarda (Posição_NED, Velocidade_NED) de cada drone
+        estados = {} 
         
         # 1. Coleta os estados de todos
         for i in range(NUM_DRONES):
@@ -139,18 +151,18 @@ if __name__ == "__main__":
             while queues_resp[i].qsize() > 1: queues_resp[i].get_nowait()
             
             lat, lon, _, vn, ve = queues_resp[i].get()[1]
-            pos_ned = gps_to_ned(lat, lon, ref_lat, ref_lon)
+            pos_ned = gps_to_ned(lat, lon)
             vel_ned = np.array([vn, ve])
             
             estados[i] = {"p": pos_ned, "v": vel_ned}
 
-        # Verifica se o centro do bando chegou ao objetivo
+        # Verifica se o centro de massa do bando chegou ao objetivo
         centro_de_massa = np.mean([estados[i]["p"] for i in range(NUM_DRONES)], axis=0)
         if np.linalg.norm(P_GOAL - centro_de_massa) < 3.0:
             chegaram = True
             break
 
-        # 2. Calcula as 4 Forças (Equações 11 do TCC)
+        # 2. Calcula as Forças (Equações 11 do TCC)
         novas_posicoes = {}
         
         for i in range(NUM_DRONES):
@@ -158,11 +170,34 @@ if __name__ == "__main__":
             v_i = estados[i]["v"]
             
             f_sep = np.array([0.0, 0.0])
+            f_obs = np.array([0.0, 0.0]) # Nova força exclusiva para obstáculos
             f_coh = np.array([0.0, 0.0])
             f_ali = np.array([0.0, 0.0])
             
+            # --- SEPARAÇÃO DOS OBSTÁCULOS (Considerando a BORDA) ---
+            for p_obs in OBSTACULOS_ESTATICOS:
+                vetor_dist_obs = p_i - p_obs
+                
+                # Truque da colinearidade
+                if abs(vetor_dist_obs[1]) < 0.2 and abs(vetor_dist_obs[0]) > 0:
+                    vetor_dist_obs[1] += 1.0
+                    
+                dist_centro = np.linalg.norm(vetor_dist_obs)
+                
+                # Desconta o raio físico do cilindro para achar a distância até a PAREDE
+                dist_borda = dist_centro - RAIO_CILINDRO 
+                
+                if dist_borda < 0.1:
+                    dist_borda = 0.1 # Evita erro de divisão por zero se ele "ralar" na parede
+                    
+                if dist_centro < RAIO_VISAO_OBS:
+                    # A força agora cresce ao infinito quando ele encosta na BORDA
+                    # Usamos dist_borda ao cubo (**3) para a força explodir de forma muito abrupta 
+                    # apenas quando ele chega muito perto, criando uma parede invisível dura.
+                    f_obs += (vetor_dist_obs / (dist_borda**3))
+                    
+            # --- CÁLCULOS COM OS VIZINHOS (OUTROS DRONES) ---
             vizinhos = [j for j in range(NUM_DRONES) if j != i]
-            
             if len(vizinhos) > 0:
                 for j in vizinhos:
                     p_j = estados[j]["p"]
@@ -170,49 +205,39 @@ if __name__ == "__main__":
                     
                     vetor_dist = p_i - p_j
                     dist = np.linalg.norm(vetor_dist)
-                    
-                    # Evita divisão por zero
                     if dist < 0.1: dist = 0.1 
                     
-                    # Separação: (p_i - p_j) / ||p_i - p_j||^2
                     f_sep += vetor_dist / (dist**2)
-                    
-                    # Coesão (soma): (p_j - p_i)
                     f_coh += (p_j - p_i)
-                    
-                    # Alinhamento (soma): (v_j - v_i)
                     f_ali += (v_j - v_i)
                 
-                # Coesão e Alinhamento são médias (dividir por |N_i|)
+                # Coesão e Alinhamento são médias
                 f_coh = f_coh / len(vizinhos)
                 f_ali = f_ali / len(vizinhos)
 
-            # Busca por objetivo: (p_goal - p_i)
+            # --- BUSCA PELO OBJETIVO ---
             f_goal = P_GOAL - p_i
-            # Normaliza f_goal para que a atração não seja esmagadora de longe
             norm_goal = np.linalg.norm(f_goal)
             if norm_goal > 0: f_goal = f_goal / norm_goal
 
-            # 3. Força Resultante u_i (Equação 10 do TCC)
-            u_i = (W_SEP * f_sep) + (W_COH * f_coh) + (W_ALI * f_ali) + (W_GOAL * f_goal)
+            # 3. Força Resultante u_i (Agora com o W_OBS isolado)
+            u_i = (W_SEP * f_sep) + (W_OBS * f_obs) + (W_COH * f_coh) + (W_ALI * f_ali) + (W_GOAL * f_goal)
             
-            # Limita a magnitude do vetor resultante para movimentos seguros
             norm_u = np.linalg.norm(u_i)
             if norm_u > MAX_STEP:
                 u_i = (u_i / norm_u) * MAX_STEP
                 
-            # A nova posição desejada é a posição atual + o vetor de comportamento
             novas_posicoes[i] = p_i + u_i
 
         # 4. Enviar os Comandos de Movimento
         for i in range(NUM_DRONES):
             prox_ned = novas_posicoes[i]
-            prox_lat, prox_lon = ned_to_gps(prox_ned[0], prox_ned[1], ref_lat, ref_lon)
+            prox_lat, prox_lon = ned_to_gps(prox_ned[0], prox_ned[1])
             queues_cmd[i].put(("goto", (prox_lat, prox_lon, ALTITUDE)))
             
         time.sleep(0.5)
 
-    print("\n✅ O Bando alcançou o objetivo de migração!")
+    print("\n✅ O Bando alcançou o objetivo de migração ileso!")
     print("🛬 Pousando...")
     for q in queues_cmd: q.put(("land", None))
     time.sleep(10)
