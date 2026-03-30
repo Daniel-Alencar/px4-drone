@@ -13,7 +13,7 @@ num_vehicles=10
 model="gz_x500" 
 
 # Mundo do Gazebo desejado
-world="APF_world"
+world="wind_obstacles_world"
 
 # --- CONFIGURAÇÕES DO GRID ---
 cols=4       # Número de drones por linha

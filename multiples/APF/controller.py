@@ -34,7 +34,6 @@ OBSTACULOS_ESTATICOS = [
 
 # -----------------------
 # Coordenadas Absolutas do Gazebo (Origem X=0, Y=0)
-# Extraídas exatamente do seu arquivo APF_world.sdf
 # -----------------------
 REF_LAT = 47.397971057728974
 REF_LON = 8.5461637398001464
