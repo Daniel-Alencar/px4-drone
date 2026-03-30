@@ -1,7 +1,10 @@
+
+==================================================
 📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (APF)
 ==================================================
 ⏱️  Tempo Total de Convergência: 177.80 segundos
 💾 Arquivo de log salvo como: resultados_apf_20260330_120628.csv
+📝 Relatório salvo como: relatorio.txt
 --------------------------------------------------
 Drone 0: Voou 65.61m | Margem Segurança (Obs): 2.02m
 Drone 1: Voou 57.51m | Margem Segurança (Obs): 1.98m

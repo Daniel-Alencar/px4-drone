@@ -4,7 +4,7 @@
 ==================================================
 ⏱️  Tempo Total de Convergência: 170.23 segundos
 💾 Arquivo de log (CSV) salvo como: resultados_apf_20260330_123557.csv
-📝 Relatório salvo como: relatorio_apf_20260330_123557.txt
+📝 Relatório salvo como: relatorio.txt
 --------------------------------------------------
 Drone 0: Voou 66.08m | Margem Segurança (Obs): 1.96m
 Drone 1: Voou 64.69m | Margem Segurança (Obs): 2.09m
