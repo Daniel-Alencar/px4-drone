@@ -3,13 +3,14 @@ import asyncio
 import time
 import math
 import numpy as np
+import csv
+from datetime import datetime
 from mavsdk import System
 
 # -----------------------
 # Configurações do APF
 # -----------------------
-# Mude este número para a mesma quantidade do seu script Bash!
-NUM_DRONES = 10
+NUM_DRONES = 8
 ALTITUDE = 10.0
 
 # Ganhos do Campo de Potencial Balanceados
@@ -40,27 +41,21 @@ REF_LON = 8.5461637398001464
 EARTH_RADIUS = 6371000.0 
 
 def gps_to_ned(lat, lon):
-    """ Converte Lat/Lon do Drone para Metros (N, E) a partir do centro do Gazebo """
     lat_rad, lon_rad = math.radians(lat), math.radians(lon)
     ref_lat_rad, ref_lon_rad = math.radians(REF_LAT), math.radians(REF_LON)
-    
     n = (lat_rad - ref_lat_rad) * EARTH_RADIUS
     e = (lon_rad - ref_lon_rad) * EARTH_RADIUS * math.cos(ref_lat_rad)
     return np.array([n, e])
 
 def ned_to_gps(n, e):
-    """ Converte Metros (N, E) para Lat/Lon exato para o MAVSDK """
     ref_lat_rad = math.radians(REF_LAT)
-    
     d_lat = n / EARTH_RADIUS
     d_lon = e / (EARTH_RADIUS * math.cos(ref_lat_rad))
-    
     new_lat = REF_LAT + math.degrees(d_lat)
     new_lon = REF_LON + math.degrees(d_lon)
     return new_lat, new_lon
 
 def calcular_forcas_apf(pos_atual, pos_objetivo, outras_posicoes, obstaculos):
-    # 1. Força de Atração Constante (Potencial Cônico)
     vetor_atracao = pos_objetivo - pos_atual
     distancia_alvo = np.linalg.norm(vetor_atracao)
     
@@ -71,11 +66,8 @@ def calcular_forcas_apf(pos_atual, pos_objetivo, outras_posicoes, obstaculos):
         
     f_rep = np.array([0.0, 0.0])
     
-    # 2. Repulsão dos OBSTÁCULOS (Bolha Grande de Proteção: D_OBS)
     for p_obs in obstaculos:
         vetor_distancia = pos_atual - p_obs
-        
-        # Truque da Colinearidade
         if abs(vetor_distancia[1]) < 0.2 and abs(vetor_distancia[0]) > 0:
             vetor_distancia[1] += 0.5
             
@@ -86,8 +78,6 @@ def calcular_forcas_apf(pos_atual, pos_objetivo, outras_posicoes, obstaculos):
             termo2 = 1.0 / (distancia**3)
             f_rep += K_REP * termo1 * termo2 * vetor_distancia
 
-    # 3. Repulsão dos OUTROS DRONES 
-    # Bolha reduzida para 1.8m para permitir que eles voem a 2m de distância sem conflito
     D_DRONE = 1.8 
     for p_drone in outras_posicoes:
         vetor_distancia = pos_atual - p_drone
@@ -98,10 +88,8 @@ def calcular_forcas_apf(pos_atual, pos_objetivo, outras_posicoes, obstaculos):
             termo2 = 1.0 / (distancia**3)
             f_rep += (K_REP * 0.5) * termo1 * termo2 * vetor_distancia
 
-    # 4. Força Resultante
     f_total = f_att + f_rep
     
-    # Limita o passo máximo
     norma_f = np.linalg.norm(f_total)
     if norma_f > MAX_STEP:
         f_total = (f_total / norma_f) * MAX_STEP
@@ -170,23 +158,28 @@ if __name__ == "__main__":
     print("\n🚀 Decolando enxame...")
     for q in queues_cmd: q.put(("takeoff", ALTITUDE))
     start_all.set()
-    
-    # Dá um pouco mais de tempo para garantir que todos subam
     time.sleep(15) 
 
-    # --- Definição Dinâmica de Objetivos ---
-    # Todos vão 40 metros para frente (Norte), mantendo o espaçamento lateral (Leste) original do bash
     objetivos_ned = {}
     for i in range(NUM_DRONES):
         objetivos_ned[i] = np.array([40.0, float(i * 2)]) 
 
     print("\n🏁 INICIANDO NAVEGAÇÃO POR CAMPOS POTENCIAIS (APF)")
-    print(f"Alvos definidos para {NUM_DRONES} drones a 40m de distância.")
-
-    # Loop de Controle
+    
+    # ---------------------------------------------------------
+    # INICIALIZAÇÃO DO RASTREAMENTO DE MÉTRICAS (DATA LOGGER)
+    # ---------------------------------------------------------
+    dados_log = [] # Lista para armazenar as linhas do CSV
+    distancia_percorrida = {i: 0.0 for i in range(NUM_DRONES)}
+    posicao_anterior = {i: None for i in range(NUM_DRONES)}
+    menor_distancia_obstaculo = {i: float('inf') for i in range(NUM_DRONES)}
+    
+    tempo_inicio_missao = time.time()
     chegaram = [False] * NUM_DRONES
     
+    # Loop de Controle
     while not all(chegaram):
+        tempo_atual = time.time() - tempo_inicio_missao
         posicoes_atuais_ned = {}
         
         # 1. Obter a posição GPS atual de todos e converter para NED
@@ -195,10 +188,33 @@ if __name__ == "__main__":
             while queues_resp[i].qsize() > 1: queues_resp[i].get_nowait()
             
             lat, lon, _ = queues_resp[i].get()[1]
-            posicoes_atuais_ned[i] = gps_to_ned(lat, lon)
+            pos_ned = gps_to_ned(lat, lon)
+            posicoes_atuais_ned[i] = pos_ned
             
-            # Margem de erro para chegar ao alvo
-            dist_ao_alvo = np.linalg.norm(objetivos_ned[i] - posicoes_atuais_ned[i])
+            # --- ATUALIZAÇÃO DAS MÉTRICAS PARA O DRONE 'i' ---
+            
+            # Calcula a distância percorrida no último passo
+            if posicao_anterior[i] is not None:
+                dist_passo = np.linalg.norm(pos_ned - posicao_anterior[i])
+                distancia_percorrida[i] += dist_passo
+            posicao_anterior[i] = pos_ned
+            
+            # Calcula a menor distância que o drone passou de qualquer obstáculo neste instante
+            min_dist_neste_instante = float('inf')
+            for obs in OBSTACULOS_ESTATICOS:
+                d = np.linalg.norm(pos_ned - obs)
+                if d < min_dist_neste_instante:
+                    min_dist_neste_instante = d
+            
+            # Salva o recorde de proximidade
+            if min_dist_neste_instante < menor_distancia_obstaculo[i]:
+                menor_distancia_obstaculo[i] = min_dist_neste_instante
+
+            # Adiciona os dados na lista para o CSV
+            dados_log.append([tempo_atual, i, pos_ned[0], pos_ned[1], distancia_percorrida[i], min_dist_neste_instante])
+
+            # Verifica se chegou no alvo
+            dist_ao_alvo = np.linalg.norm(objetivos_ned[i] - pos_ned)
             if dist_ao_alvo < 1.5:
                 chegaram[i] = True
 
@@ -209,8 +225,6 @@ if __name__ == "__main__":
                 
             p_i = posicoes_atuais_ned[i]
             p_goal = objetivos_ned[i]
-            
-            # Extrai a posição de todos os OUTROS drones para calcular a repulsão
             outros_drones = [posicoes_atuais_ned[j] for j in range(NUM_DRONES) if j != i]
             
             forca_resultante = calcular_forcas_apf(p_i, p_goal, outros_drones, OBSTACULOS_ESTATICOS)
@@ -219,15 +233,59 @@ if __name__ == "__main__":
             prox_lat, prox_lon = ned_to_gps(proxima_pos_ned[0], proxima_pos_ned[1])
             
             queues_cmd[i].put(("goto", (prox_lat, prox_lon, ALTITUDE)))
-            
-            # Print simplificado para não poluir muito a tela com muitos drones
-            print(f"D{i} -> N:{p_i[0]:.1f} | E:{p_i[1]:.1f}")
 
-        print("-" * 30)
-        time.sleep(0.5)
+        # time.sleep(0.5) reduzido para ter mais dados no gráfico (resolução de 0.2s)
+        time.sleep(0.2)
 
-    print("\n✅ Todos os drones alcançaram seus objetivos desviando dos obstáculos!")
+    tempo_total = time.time() - tempo_inicio_missao
+    print("\n✅ Todos os drones alcançaram seus objetivos!")
     
+    # ---------------------------------------------------------
+    # EXPORTAÇÃO DOS DADOS E RELATÓRIO FINAL
+    # ---------------------------------------------------------
+    nome_arquivo = f"resultados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    
+    with open(nome_arquivo, mode='w', newline='') as arquivo_csv:
+        escritor = csv.writer(arquivo_csv)
+        escritor.writerow(["Tempo_s", "Drone_ID", "Pos_N_Metros", "Pos_E_Metros", "Distancia_Percorrida_Acumulada_m", "Distancia_Minima_Obstaculo_Instante_m"])
+        escritor.writerows(dados_log)
+
+    # ---------------------------------------------------------
+    # EXPORTAÇÃO DOS DADOS E RELATÓRIO FINAL
+    # ---------------------------------------------------------
+    nome_arquivo = f"resultados.csv"
+    nome_arquivo_txt = nome_arquivo.replace("resultados", "relatorio").replace(".csv", ".txt")
+    
+    with open(nome_arquivo, mode='w', newline='') as arquivo_csv:
+        escritor = csv.writer(arquivo_csv)
+        escritor.writerow(["Tempo_s", "Drone_ID", "Pos_N_Metros", "Pos_E_Metros", "Distancia_Percorrida_Acumulada_m", "Distancia_Minima_Obstaculo_Instante_m"])
+        escritor.writerows(dados_log)
+
+    # Montando o relatório em uma variável de texto
+    relatorio = "\n" + "="*50 + "\n"
+    relatorio += "📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (APF)\n"
+    relatorio += "="*50 + "\n"
+    relatorio += f"⏱️  Tempo Total de Convergência: {tempo_total:.2f} segundos\n"
+    relatorio += f"💾 Arquivo de log (CSV) salvo como: {nome_arquivo}\n"
+    relatorio += f"📝 Relatório salvo como: {nome_arquivo_txt}\n"
+    relatorio += "-" * 50 + "\n"
+    
+    distancia_media = 0
+    for i in range(NUM_DRONES):
+        distancia_media += distancia_percorrida[i]
+        relatorio += f"Drone {i}: Voou {distancia_percorrida[i]:.2f}m | Margem Segurança (Obs): {menor_distancia_obstaculo[i]:.2f}m\n"
+    
+    relatorio += "-" * 50 + "\n"
+    relatorio += f"📏 Distância média percorrida pelo enxame: {(distancia_media/NUM_DRONES):.2f}m\n"
+    relatorio += "="*50 + "\n"
+
+    # Imprime no terminal para você ver
+    print(relatorio)
+
+    # Salva o texto no arquivo .txt (usando utf-8 para suportar os emojis e acentos)
+    with open(nome_arquivo_txt, "w", encoding="utf-8") as arquivo_txt:
+        arquivo_txt.write(relatorio)
+
     print("🛬 Pousando...")
     for q in queues_cmd: q.put(("land", None))
     time.sleep(10)
