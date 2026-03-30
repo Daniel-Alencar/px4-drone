@@ -1,0 +1,19 @@
+
+==================================================
+📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (APF)
+==================================================
+⏱️  Tempo Total de Convergência: 122.53 segundos
+💾 Arquivo de log (CSV) salvo como: resultados.csv
+📝 Relatório salvo como: relatorio.txt
+--------------------------------------------------
+Drone 0: Voou 43.75m | Margem Segurança (Obs): infm
+Drone 1: Voou 47.38m | Margem Segurança (Obs): infm
+Drone 2: Voou 44.67m | Margem Segurança (Obs): infm
+Drone 3: Voou 38.45m | Margem Segurança (Obs): infm
+Drone 4: Voou 48.80m | Margem Segurança (Obs): infm
+Drone 5: Voou 48.48m | Margem Segurança (Obs): infm
+Drone 6: Voou 49.58m | Margem Segurança (Obs): infm
+Drone 7: Voou 44.64m | Margem Segurança (Obs): infm
+--------------------------------------------------
+📏 Distância média percorrida pelo enxame: 45.72m
+==================================================
