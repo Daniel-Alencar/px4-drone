@@ -4,6 +4,8 @@ import time
 import math
 import numpy as np
 import csv
+import os
+import psutil
 from datetime import datetime
 from mavsdk import System
 
@@ -167,13 +169,20 @@ if __name__ == "__main__":
     print("\n🏁 INICIANDO NAVEGAÇÃO POR CAMPOS POTENCIAIS (APF)")
     
     # ---------------------------------------------------------
-    # INICIALIZAÇÃO DO RASTREAMENTO DE MÉTRICAS (DATA LOGGER)
+    # INICIALIZAÇÃO DO RASTREAMENTO DE MÉTRICAS (DATA LOGGER E BENCHMARK)
     # ---------------------------------------------------------
-    dados_log = [] # Lista para armazenar as linhas do CSV
+    dados_log = [] 
     distancia_percorrida = {i: 0.0 for i in range(NUM_DRONES)}
     posicao_anterior = {i: None for i in range(NUM_DRONES)}
     menor_distancia_obstaculo = {i: float('inf') for i in range(NUM_DRONES)}
     
+    # Medidores Computacionais
+    processo_atual = psutil.Process(os.getpid())
+    processo_atual.cpu_percent() # Primeira chamada para calibrar o psutil
+    tempos_de_calculo_ms = []
+    cpu_usada_list = []
+    ram_usada_list = []
+
     tempo_inicio_missao = time.time()
     chegaram = [False] * NUM_DRONES
     
@@ -191,34 +200,30 @@ if __name__ == "__main__":
             pos_ned = gps_to_ned(lat, lon)
             posicoes_atuais_ned[i] = pos_ned
             
-            # --- ATUALIZAÇÃO DAS MÉTRICAS PARA O DRONE 'i' ---
-            
-            # Calcula a distância percorrida no último passo
+            # Atualização de métricas de voo
             if posicao_anterior[i] is not None:
                 dist_passo = np.linalg.norm(pos_ned - posicao_anterior[i])
                 distancia_percorrida[i] += dist_passo
             posicao_anterior[i] = pos_ned
             
-            # Calcula a menor distância que o drone passou de qualquer obstáculo neste instante
             min_dist_neste_instante = float('inf')
             for obs in OBSTACULOS_ESTATICOS:
                 d = np.linalg.norm(pos_ned - obs)
                 if d < min_dist_neste_instante:
                     min_dist_neste_instante = d
             
-            # Salva o recorde de proximidade
             if min_dist_neste_instante < menor_distancia_obstaculo[i]:
                 menor_distancia_obstaculo[i] = min_dist_neste_instante
 
-            # Adiciona os dados na lista para o CSV
             dados_log.append([tempo_atual, i, pos_ned[0], pos_ned[1], distancia_percorrida[i], min_dist_neste_instante])
 
-            # Verifica se chegou no alvo
             dist_ao_alvo = np.linalg.norm(objetivos_ned[i] - pos_ned)
             if dist_ao_alvo < 1.5:
                 chegaram[i] = True
 
-        # 2. Calcular Campos de Potencial
+        # 2. Calcular Campos de Potencial (Com Cronômetro)
+        tempo_matematica_iteracao = 0.0
+        
         for i in range(NUM_DRONES):
             if chegaram[i]:
                 continue 
@@ -227,47 +232,69 @@ if __name__ == "__main__":
             p_goal = objetivos_ned[i]
             outros_drones = [posicoes_atuais_ned[j] for j in range(NUM_DRONES) if j != i]
             
+            # --- INÍCIO DO CRONÔMETRO (APENAS A MATEMÁTICA) ---
+            t_inicio = time.perf_counter()
             forca_resultante = calcular_forcas_apf(p_i, p_goal, outros_drones, OBSTACULOS_ESTATICOS)
+            t_fim = time.perf_counter()
+            # --- FIM DO CRONÔMETRO ---
+            
+            tempo_matematica_iteracao += (t_fim - t_inicio) * 1000.0
             
             proxima_pos_ned = p_i + forca_resultante
             prox_lat, prox_lon = ned_to_gps(proxima_pos_ned[0], proxima_pos_ned[1])
             
             queues_cmd[i].put(("goto", (prox_lat, prox_lon, ALTITUDE)))
 
-        # time.sleep(0.5) reduzido para ter mais dados no gráfico (resolução de 0.2s)
+        # Registra as métricas computacionais do loop (se houve cálculo)
+        if tempo_matematica_iteracao > 0:
+            tempos_de_calculo_ms.append(tempo_matematica_iteracao)
+            cpu_usada_list.append(processo_atual.cpu_percent())
+            ram_usada_list.append(processo_atual.memory_info().rss / (1024 * 1024)) # Em MB
+
         time.sleep(0.2)
 
     tempo_total = time.time() - tempo_inicio_missao
     print("\n✅ Todos os drones alcançaram seus objetivos!")
     
     # ---------------------------------------------------------
-    # EXPORTAÇÃO DOS DADOS E RELATÓRIO FINAL
+    # CÁLCULO DAS MÉTRICAS COMPUTACIONAIS
     # ---------------------------------------------------------
-    nome_arquivo = f"resultados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    
-    with open(nome_arquivo, mode='w', newline='') as arquivo_csv:
-        escritor = csv.writer(arquivo_csv)
-        escritor.writerow(["Tempo_s", "Drone_ID", "Pos_N_Metros", "Pos_E_Metros", "Distancia_Percorrida_Acumulada_m", "Distancia_Minima_Obstaculo_Instante_m"])
-        escritor.writerows(dados_log)
+    media_calc_ms = sum(tempos_de_calculo_ms) / len(tempos_de_calculo_ms) if tempos_de_calculo_ms else 0
+    max_calc_ms = max(tempos_de_calculo_ms) if tempos_de_calculo_ms else 0
+    media_cpu = sum(cpu_usada_list) / len(cpu_usada_list) if cpu_usada_list else 0
+    max_ram = max(ram_usada_list) if ram_usada_list else 0
+
+    # Exportar Benchmark Global
+    NOME_ALGORITMO = "APF"
+    arquivo_benchmark = "comparativo_computacional.csv"
+    arquivo_existe = os.path.isfile(arquivo_benchmark)
+
+    with open(arquivo_benchmark, mode='a', newline='', encoding='utf-8') as f:
+        escritor_bench = csv.writer(f)
+        if not arquivo_existe:
+            escritor_bench.writerow(["Algoritmo", "Num_Drones", "Media_Calc_ms", "Pico_Calc_ms", "Media_CPU_Perc", "Pico_RAM_MB", "Tempo_Missao_s"])
+        escritor_bench.writerow([NOME_ALGORITMO, NUM_DRONES, round(media_calc_ms, 4), round(max_calc_ms, 4), round(media_cpu, 2), round(max_ram, 2), round(tempo_total, 2)])
 
     # ---------------------------------------------------------
     # EXPORTAÇÃO DOS DADOS E RELATÓRIO FINAL
     # ---------------------------------------------------------
-    nome_arquivo = f"resultados.csv"
-    nome_arquivo_txt = nome_arquivo.replace("resultados", "relatorio").replace(".csv", ".txt")
+    nome_arquivo_timestamp = f"resultados.csv"
     
-    with open(nome_arquivo, mode='w', newline='') as arquivo_csv:
+    with open(nome_arquivo_timestamp, mode='w', newline='') as arquivo_csv:
         escritor = csv.writer(arquivo_csv)
         escritor.writerow(["Tempo_s", "Drone_ID", "Pos_N_Metros", "Pos_E_Metros", "Distancia_Percorrida_Acumulada_m", "Distancia_Minima_Obstaculo_Instante_m"])
         escritor.writerows(dados_log)
+
+    nome_arquivo_txt = f"relatorio.txt"
 
     # Montando o relatório em uma variável de texto
     relatorio = "\n" + "="*50 + "\n"
     relatorio += "📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (APF)\n"
     relatorio += "="*50 + "\n"
     relatorio += f"⏱️  Tempo Total de Convergência: {tempo_total:.2f} segundos\n"
-    relatorio += f"💾 Arquivo de log (CSV) salvo como: {nome_arquivo}\n"
+    relatorio += f"💾 Arquivo de log (CSV) salvo como: {nome_arquivo_timestamp}\n"
     relatorio += f"📝 Relatório salvo como: {nome_arquivo_txt}\n"
+    relatorio += f"📈 Benchmark Global atualizado: {arquivo_benchmark}\n"
     relatorio += "-" * 50 + "\n"
     
     distancia_media = 0
@@ -277,12 +304,21 @@ if __name__ == "__main__":
     
     relatorio += "-" * 50 + "\n"
     relatorio += f"📏 Distância média percorrida pelo enxame: {(distancia_media/NUM_DRONES):.2f}m\n"
+    
+    # Adicionando o Custo Computacional no .txt
+    relatorio += "-" * 50 + "\n"
+    relatorio += "💻 CUSTO COMPUTACIONAL DO ALGORITMO\n"
+    relatorio += "-" * 50 + "\n"
+    relatorio += f"⏱️  Tempo Médio de Cálculo por Loop: {media_calc_ms:.4f} ms\n"
+    relatorio += f"⚠️  Pico Máximo de Cálculo (Gargalo): {max_calc_ms:.4f} ms\n"
+    relatorio += f"🧠 Uso Médio de CPU do Algoritmo: {media_cpu:.2f}%\n"
+    relatorio += f"📦 Consumo de RAM (Pico): {max_ram:.2f} MB\n"
     relatorio += "="*50 + "\n"
 
     # Imprime no terminal para você ver
     print(relatorio)
 
-    # Salva o texto no arquivo .txt (usando utf-8 para suportar os emojis e acentos)
+    # Salva o texto no arquivo .txt
     with open(nome_arquivo_txt, "w", encoding="utf-8") as arquivo_txt:
         arquivo_txt.write(relatorio)
 
