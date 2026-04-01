@@ -259,24 +259,19 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     # EXPORTAÇÃO DOS DADOS E RELATÓRIO FINAL
     # ---------------------------------------------------------
-    nome_arquivo_timestamp = f"resultados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    nome_arquivo_timestamp = f"resultados.csv"
     with open(nome_arquivo_timestamp, mode='w', newline='') as arquivo_csv:
         escritor = csv.writer(arquivo_csv)
         escritor.writerow(["Tempo_s", "Drone_ID", "Pos_N_Metros", "Pos_E_Metros", "Distancia_Percorrida_Acumulada_m", "Distancia_Minima_Obstaculo_Instante_m"])
         escritor.writerows(dados_log)
 
-    nome_arquivo = f"resultados.csv"
-    nome_arquivo_txt = nome_arquivo.replace("resultados", "relatorio").replace(".csv", ".txt")
-    with open(nome_arquivo, mode='w', newline='') as arquivo_csv:
-        escritor = csv.writer(arquivo_csv)
-        escritor.writerow(["Tempo_s", "Drone_ID", "Pos_N_Metros", "Pos_E_Metros", "Distancia_Percorrida_Acumulada_m", "Distancia_Minima_Obstaculo_Instante_m"])
-        escritor.writerows(dados_log)
+    nome_arquivo_txt = f"relatorio.txt"
 
     relatorio = "\n" + "="*50 + "\n"
     relatorio += "📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (VIRTUAL STRUCTURE)\n"
     relatorio += "="*50 + "\n"
     relatorio += f"⏱️  Tempo Total de Convergência: {tempo_total:.2f} segundos\n"
-    relatorio += f"💾 Arquivos salvos: {nome_arquivo} e {nome_arquivo_txt}\n"
+    relatorio += f"💾 Arquivos salvos: {nome_arquivo_txt} e {nome_arquivo_txt}\n"
     relatorio += f"📈 Benchmark Global atualizado: {arquivo_benchmark}\n"
     relatorio += "-" * 50 + "\n"
     
