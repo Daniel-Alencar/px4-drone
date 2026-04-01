@@ -8,7 +8,7 @@ import os
 # ---------------------------------------------------------
 # 1. ENCONTRAR O ARQUIVO CSV MAIS RECENTE
 # ---------------------------------------------------------
-arquivos_csv = glob.glob('resultados_*.csv')
+arquivos_csv = glob.glob('resultados*.csv')
 
 if not arquivos_csv:
     print("❌ Nenhum arquivo CSV encontrado na pasta atual.")
