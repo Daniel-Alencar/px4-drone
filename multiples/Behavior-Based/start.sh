@@ -8,7 +8,7 @@ pkill gzclient
 pkill gzserver
 
 # Configurações iniciais
-num_vehicles=3
+num_vehicles=8
 # Modelo do drone (x500 é padrão para Gazebo Garden/Harmonic)
 model="gz_x500" 
 

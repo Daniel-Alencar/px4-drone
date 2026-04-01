@@ -3,16 +3,17 @@ import asyncio
 import time
 import math
 import numpy as np
+import csv
+import os
+import psutil
+from datetime import datetime
 from mavsdk import System
 
 # -----------------------
 # Configurações do Behavior-Based
 # -----------------------
-NUM_DRONES = 3
-ALTITUDE = 12.0
-
-NUM_DRONES = 3
-ALTITUDE = 12.0
+NUM_DRONES = 8
+ALTITUDE = 10.0
 
 # Novos Pesos: O Efeito Funil Resolvido
 W_SEP = 15.0   # AUMENTADO: Respeito máximo pelo espaço do colega!
@@ -119,7 +120,7 @@ if __name__ == "__main__":
     events_ready = [mp.Event() for _ in range(NUM_DRONES)]
     start_all = mp.Event()
 
-    print("--- Inicializando Arquitetura Behavior-Based com Obstáculos ---")
+    print(f"--- Inicializando Arquitetura Behavior-Based com {NUM_DRONES} Drones ---")
     processes = []
     for i in range(NUM_DRONES):
         p = mp.Process(target=process_runner, args=(i, f"udp://:{14540+i}", 50050+i, queues_cmd[i], queues_resp[i], events_ready[i], start_all))
@@ -139,13 +140,30 @@ if __name__ == "__main__":
     print("\n🦅 INICIANDO COMPORTAMENTO DE BANDO")
     print(f"Objetivo: N={P_GOAL[0]}m. O enxame vai fluir pelos obstáculos.")
 
-    # Loop de Controle
+    # ---------------------------------------------------------
+    # INICIALIZAÇÃO DO RASTREAMENTO DE MÉTRICAS (DATA LOGGER E BENCHMARK)
+    # ---------------------------------------------------------
+    dados_log = [] 
+    distancia_percorrida = {i: 0.0 for i in range(NUM_DRONES)}
+    posicao_anterior = {i: None for i in range(NUM_DRONES)}
+    menor_distancia_obstaculo = {i: float('inf') for i in range(NUM_DRONES)}
+    
+    # Medidores Computacionais
+    processo_atual = psutil.Process(os.getpid())
+    processo_atual.cpu_percent() # Primeira chamada para calibrar o psutil
+    tempos_de_calculo_ms = []
+    cpu_usada_list = []
+    ram_usada_list = []
+
+    tempo_inicio_missao = time.time()
     chegaram = False
     
+    # Loop de Controle
     while not chegaram:
+        tempo_atual = time.time() - tempo_inicio_missao
         estados = {} 
         
-        # 1. Coleta os estados de todos
+        # 1. Coleta os estados de todos e Atualiza Métricas de Voo
         for i in range(NUM_DRONES):
             queues_cmd[i].put(("get_state", None))
             while queues_resp[i].qsize() > 1: queues_resp[i].get_nowait()
@@ -156,6 +174,23 @@ if __name__ == "__main__":
             
             estados[i] = {"p": pos_ned, "v": vel_ned}
 
+            # Atualização de métricas de voo
+            if posicao_anterior[i] is not None:
+                dist_passo = np.linalg.norm(pos_ned - posicao_anterior[i])
+                distancia_percorrida[i] += dist_passo
+            posicao_anterior[i] = pos_ned
+            
+            min_dist_neste_instante = float('inf')
+            for obs in OBSTACULOS_ESTATICOS:
+                d = np.linalg.norm(pos_ned - obs)
+                if d < min_dist_neste_instante:
+                    min_dist_neste_instante = d
+            
+            if min_dist_neste_instante < menor_distancia_obstaculo[i]:
+                menor_distancia_obstaculo[i] = min_dist_neste_instante
+
+            dados_log.append([tempo_atual, i, pos_ned[0], pos_ned[1], distancia_percorrida[i], min_dist_neste_instante])
+
         # Verifica se o centro de massa do bando chegou ao objetivo
         centro_de_massa = np.mean([estados[i]["p"] for i in range(NUM_DRONES)], axis=0)
         if np.linalg.norm(P_GOAL - centro_de_massa) < 3.0:
@@ -165,12 +200,15 @@ if __name__ == "__main__":
         # 2. Calcula as Forças (Equações 11 do TCC)
         novas_posicoes = {}
         
+        # --- INÍCIO DO CRONÔMETRO (APENAS A MATEMÁTICA) ---
+        t_inicio = time.perf_counter()
+        
         for i in range(NUM_DRONES):
             p_i = estados[i]["p"]
             v_i = estados[i]["v"]
             
             f_sep = np.array([0.0, 0.0])
-            f_obs = np.array([0.0, 0.0]) # Nova força exclusiva para obstáculos
+            f_obs = np.array([0.0, 0.0])
             f_coh = np.array([0.0, 0.0])
             f_ali = np.array([0.0, 0.0])
             
@@ -183,17 +221,11 @@ if __name__ == "__main__":
                     vetor_dist_obs[1] += 1.0
                     
                 dist_centro = np.linalg.norm(vetor_dist_obs)
-                
-                # Desconta o raio físico do cilindro para achar a distância até a PAREDE
                 dist_borda = dist_centro - RAIO_CILINDRO 
-                
                 if dist_borda < 0.1:
-                    dist_borda = 0.1 # Evita erro de divisão por zero se ele "ralar" na parede
+                    dist_borda = 0.1 
                     
                 if dist_centro < RAIO_VISAO_OBS:
-                    # A força agora cresce ao infinito quando ele encosta na BORDA
-                    # Usamos dist_borda ao cubo (**3) para a força explodir de forma muito abrupta 
-                    # apenas quando ele chega muito perto, criando uma parede invisível dura.
                     f_obs += (vetor_dist_obs / (dist_borda**3))
                     
             # --- CÁLCULOS COM OS VIZINHOS (OUTROS DRONES) ---
@@ -220,7 +252,7 @@ if __name__ == "__main__":
             norm_goal = np.linalg.norm(f_goal)
             if norm_goal > 0: f_goal = f_goal / norm_goal
 
-            # 3. Força Resultante u_i (Agora com o W_OBS isolado)
+            # 3. Força Resultante u_i
             u_i = (W_SEP * f_sep) + (W_OBS * f_obs) + (W_COH * f_coh) + (W_ALI * f_ali) + (W_GOAL * f_goal)
             
             norm_u = np.linalg.norm(u_i)
@@ -229,15 +261,93 @@ if __name__ == "__main__":
                 
             novas_posicoes[i] = p_i + u_i
 
+        t_fim = time.perf_counter()
+        # --- FIM DO CRONÔMETRO ---
+
+        # Registra as métricas computacionais do loop
+        tempo_matematica_iteracao = (t_fim - t_inicio) * 1000.0
+        if tempo_matematica_iteracao > 0:
+            tempos_de_calculo_ms.append(tempo_matematica_iteracao)
+            cpu_usada_list.append(processo_atual.cpu_percent())
+            ram_usada_list.append(processo_atual.memory_info().rss / (1024 * 1024)) # Em MB
+
         # 4. Enviar os Comandos de Movimento
         for i in range(NUM_DRONES):
             prox_ned = novas_posicoes[i]
             prox_lat, prox_lon = ned_to_gps(prox_ned[0], prox_ned[1])
             queues_cmd[i].put(("goto", (prox_lat, prox_lon, ALTITUDE)))
             
-        time.sleep(0.5)
+        time.sleep(0.2) # Mantido a 0.2 para gráficos de alta resolução iguais aos do APF
 
+    tempo_total = time.time() - tempo_inicio_missao
     print("\n✅ O Bando alcançou o objetivo de migração ileso!")
+    
+    # ---------------------------------------------------------
+    # CÁLCULO DAS MÉTRICAS COMPUTACIONAIS
+    # ---------------------------------------------------------
+    media_calc_ms = sum(tempos_de_calculo_ms) / len(tempos_de_calculo_ms) if tempos_de_calculo_ms else 0
+    max_calc_ms = max(tempos_de_calculo_ms) if tempos_de_calculo_ms else 0
+    media_cpu = sum(cpu_usada_list) / len(cpu_usada_list) if cpu_usada_list else 0
+    max_ram = max(ram_usada_list) if ram_usada_list else 0
+
+    # Exportar Benchmark Global
+    NOME_ALGORITMO = "Behavior-Based"
+    arquivo_benchmark = "comparativo_computacional.csv"
+    arquivo_existe = os.path.isfile(arquivo_benchmark)
+
+    with open(arquivo_benchmark, mode='a', newline='', encoding='utf-8') as f:
+        escritor_bench = csv.writer(f)
+        if not arquivo_existe:
+            escritor_bench.writerow(["Algoritmo", "Num_Drones", "Media_Calc_ms", "Pico_Calc_ms", "Media_CPU_Perc", "Pico_RAM_MB", "Tempo_Missao_s"])
+        escritor_bench.writerow([NOME_ALGORITMO, NUM_DRONES, round(media_calc_ms, 4), round(max_calc_ms, 4), round(media_cpu, 2), round(max_ram, 2), round(tempo_total, 2)])
+
+    # ---------------------------------------------------------
+    # EXPORTAÇÃO DOS DADOS E RELATÓRIO FINAL
+    # ---------------------------------------------------------
+    nome_arquivo_timestamp = f"resultados.csv"
+    
+    with open(nome_arquivo_timestamp, mode='w', newline='') as arquivo_csv:
+        escritor = csv.writer(arquivo_csv)
+        escritor.writerow(["Tempo_s", "Drone_ID", "Pos_N_Metros", "Pos_E_Metros", "Distancia_Percorrida_Acumulada_m", "Distancia_Minima_Obstaculo_Instante_m"])
+        escritor.writerows(dados_log)
+
+    nome_arquivo_txt = f"relatorio.txt"
+
+    # Montando o relatório em uma variável de texto
+    relatorio = "\n" + "="*50 + "\n"
+    relatorio += "📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (BEHAVIOR-BASED)\n"
+    relatorio += "="*50 + "\n"
+    relatorio += f"⏱️  Tempo Total de Convergência: {tempo_total:.2f} segundos\n"
+    relatorio += f"💾 Arquivo de log (CSV) salvo como: {nome_arquivo_timestamp}\n"
+    relatorio += f"📝 Relatório salvo como: {nome_arquivo_txt}\n"
+    relatorio += f"📈 Benchmark Global atualizado: {arquivo_benchmark}\n"
+    relatorio += "-" * 50 + "\n"
+    
+    distancia_media = 0
+    for i in range(NUM_DRONES):
+        distancia_media += distancia_percorrida[i]
+        relatorio += f"Drone {i}: Voou {distancia_percorrida[i]:.2f}m | Margem Segurança (Obs): {menor_distancia_obstaculo[i]:.2f}m\n"
+    
+    relatorio += "-" * 50 + "\n"
+    relatorio += f"📏 Distância média percorrida pelo enxame: {(distancia_media/NUM_DRONES):.2f}m\n"
+    
+    # Adicionando o Custo Computacional no .txt
+    relatorio += "-" * 50 + "\n"
+    relatorio += "💻 CUSTO COMPUTACIONAL DO ALGORITMO\n"
+    relatorio += "-" * 50 + "\n"
+    relatorio += f"⏱️ Tempo Médio de Cálculo por Loop: {media_calc_ms:.4f} ms\n"
+    relatorio += f"⚠️ Pico Máximo de Cálculo (Gargalo): {max_calc_ms:.4f} ms\n"
+    relatorio += f"🧠 Uso Médio de CPU do Algoritmo: {media_cpu:.2f}%\n"
+    relatorio += f"📦 Consumo de RAM (Pico): {max_ram:.2f} MB\n"
+    relatorio += "="*50 + "\n"
+
+    # Imprime no terminal para você ver
+    print(relatorio)
+
+    # Salva o texto no arquivo .txt
+    with open(nome_arquivo_txt, "w", encoding="utf-8") as arquivo_txt:
+        arquivo_txt.write(relatorio)
+
     print("🛬 Pousando...")
     for q in queues_cmd: q.put(("land", None))
     time.sleep(10)
