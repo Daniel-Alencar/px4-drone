@@ -1,0 +1,26 @@
+
+==================================================
+📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (CONSENSUS)
+==================================================
+⏱️  Tempo Total de Convergência: 109.34 segundos
+💾 Arquivos salvos: resultados_20260401_124228.csv e relatorio.txt
+📈 Benchmark Global atualizado: comparativo_computacional.csv
+--------------------------------------------------
+Drone 0: Voou 40.52m | Margem Segurança (Obs): 0.90m
+Drone 1: Voou 38.75m | Margem Segurança (Obs): 0.06m
+Drone 2: Voou 37.60m | Margem Segurança (Obs): 0.76m
+Drone 3: Voou 38.46m | Margem Segurança (Obs): 0.08m
+Drone 4: Voou 37.68m | Margem Segurança (Obs): 0.93m
+Drone 5: Voou 36.14m | Margem Segurança (Obs): 0.20m
+Drone 6: Voou 38.25m | Margem Segurança (Obs): 1.09m
+Drone 7: Voou 39.71m | Margem Segurança (Obs): 0.92m
+--------------------------------------------------
+📏 Distância média percorrida pelo enxame: 38.39m
+--------------------------------------------------
+💻 CUSTO COMPUTACIONAL DO ALGORITMO
+--------------------------------------------------
+⏱️ Tempo Médio de Cálculo por Loop: 0.3997 ms
+⚠️ Pico Máximo de Cálculo (Gargalo): 3.4766 ms
+🧠 Uso Médio de CPU do Algoritmo: 1.70%
+📦 Consumo de RAM (Pico): 52.20 MB
+==================================================
