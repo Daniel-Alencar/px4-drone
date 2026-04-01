@@ -12,6 +12,9 @@ num_vehicles=8
 # Modelo do drone (x500 é padrão para Gazebo Garden/Harmonic)
 model="gz_x500" 
 
+# Mundo do Gazebo desejado
+world="default"
+
 # Loop para iniciar cada drone
 for ((i=0; i<num_vehicles; i++)); do
     
@@ -33,6 +36,7 @@ for ((i=0; i<num_vehicles; i++)); do
 
     # Comando de inicialização (em background usando &)
     PX4_SYS_AUTOSTART=4001 \
+    PX4_GZ_WORLD=$world \
     PX4_SIM_MODEL=$model \
     PX4_GZ_MODEL_POSE="$pose" \
     PX4_SIM_HOST_ADDR=127.0.0.1 \
