@@ -28,16 +28,16 @@ RAIO_VISAO_OBS = 3.0
 
 # Obstáculos Virtuais no plano NED (Norte, Leste)
 OBSTACULOS_ESTATICOS = [
-    np.array([20.0, 0.0]),
-    np.array([20.0, 7.0]),
-    np.array([20.0, -7.0]),
-    np.array([24.0, 3.5]),
-    np.array([24.0, -3.5]),
-    np.array([24.0, 10.5]),
-    np.array([24.0, -10.5]),
-    np.array([28.0, 0.0]),
-    np.array([28.0, 7.0]),
-    np.array([28.0, -7.0])
+    # np.array([20.0, 0.0]),
+    # np.array([20.0, 7.0]),
+    # np.array([20.0, -7.0]),
+    # np.array([24.0, 3.5]),
+    # np.array([24.0, -3.5]),
+    # np.array([24.0, 10.5]),
+    # np.array([24.0, -10.5]),
+    # np.array([28.0, 0.0]),
+    # np.array([28.0, 7.0]),
+    # np.array([28.0, -7.0])
 ]
 
 # -----------------------
