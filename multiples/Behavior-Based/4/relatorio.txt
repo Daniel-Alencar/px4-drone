@@ -1,0 +1,27 @@
+
+==================================================
+📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (BEHAVIOR-BASED)
+==================================================
+⏱️  Tempo Total de Convergência: 146.82 segundos
+💾 Arquivo de log (CSV) salvo como: resultados.csv
+📝 Relatório salvo como: relatorio.txt
+📈 Benchmark Global atualizado: comparativo_computacional.csv
+--------------------------------------------------
+Drone 0: Voou 58.45m | Margem Segurança (Obs): infm
+Drone 1: Voou 49.68m | Margem Segurança (Obs): infm
+Drone 2: Voou 51.03m | Margem Segurança (Obs): infm
+Drone 3: Voou 53.72m | Margem Segurança (Obs): infm
+Drone 4: Voou 56.43m | Margem Segurança (Obs): infm
+Drone 5: Voou 54.10m | Margem Segurança (Obs): infm
+Drone 6: Voou 54.77m | Margem Segurança (Obs): infm
+Drone 7: Voou 56.00m | Margem Segurança (Obs): infm
+--------------------------------------------------
+📏 Distância média percorrida pelo enxame: 54.27m
+--------------------------------------------------
+💻 CUSTO COMPUTACIONAL DO ALGORITMO
+--------------------------------------------------
+⏱️ Tempo Médio de Cálculo por Loop: 0.7927 ms
+⚠️ Pico Máximo de Cálculo (Gargalo): 4.1374 ms
+🧠 Uso Médio de CPU do Algoritmo: 1.03%
+📦 Consumo de RAM (Pico): 52.24 MB
+==================================================
