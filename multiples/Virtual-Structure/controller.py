@@ -13,20 +13,14 @@ from mavsdk import System
 # Configurações da Estrutura Virtual
 # -----------------------
 NUM_DRONES = 8
-ALTITUDE = 10.0
+ALTITUDE = 10.0 # Ajustado para 10m para igualar aos outros testes
 
 # Obstáculos Virtuais no plano NED (Apenas para o Logger medir a colisão)
 RAIO_CILINDRO = 1.5   
 OBSTACULOS_ESTATICOS = [
-    np.array([20.0, 0.0]), 
-    np.array([20.0, 7.0]), 
-    np.array([20.0, -7.0]),
-    np.array([24.0, 3.5]), 
-    np.array([24.0, -3.5]), 
-    np.array([24.0, 10.5]),
-    np.array([24.0, -10.5]), 
-    np.array([28.0, 0.0]), 
-    np.array([28.0, 7.0]),
+    np.array([20.0, 0.0]), np.array([20.0, 7.0]), np.array([20.0, -7.0]),
+    np.array([24.0, 3.5]), np.array([24.0, -3.5]), np.array([24.0, 10.5]),
+    np.array([24.0, -10.5]), np.array([28.0, 0.0]), np.array([28.0, 7.0]),
     np.array([28.0, -7.0])
 ]
 
@@ -271,7 +265,7 @@ if __name__ == "__main__":
     relatorio += "📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (VIRTUAL STRUCTURE)\n"
     relatorio += "="*50 + "\n"
     relatorio += f"⏱️  Tempo Total de Convergência: {tempo_total:.2f} segundos\n"
-    relatorio += f"💾 Arquivos salvos: {nome_arquivo_txt} e {nome_arquivo_txt}\n"
+    relatorio += f"💾 Arquivos salvos: {nome_arquivo_timestamp} e {nome_arquivo_txt}\n"
     relatorio += f"📈 Benchmark Global atualizado: {arquivo_benchmark}\n"
     relatorio += "-" * 50 + "\n"
     
