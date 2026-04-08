@@ -49,7 +49,7 @@ for ((i=0; i<num_vehicles; i++)); do
     if [ "$i" -eq 0 ]; then
         sleep 20
     else
-        sleep 5
+        sleep 2
     fi
 done
 
