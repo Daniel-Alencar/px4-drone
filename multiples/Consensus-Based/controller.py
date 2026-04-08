@@ -273,7 +273,7 @@ if __name__ == "__main__":
     relatorio = "\n" + "="*50 + "\n"
     relatorio += "📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (CONSENSUS)\n"
     relatorio += "="*50 + "\n"
-    relatorio += f"⏱️  Tempo Total de Convergência: {tempo_total:.2f} segundos\n"
+    relatorio += f"⏱️ Tempo Total de Convergência: {tempo_total:.2f} segundos\n"
     relatorio += f"💾 Arquivos salvos: {nome_arquivo_timestamp} e {nome_arquivo_txt}\n"
     relatorio += f"📈 Benchmark Global atualizado: {arquivo_benchmark}\n"
     relatorio += "-" * 50 + "\n"

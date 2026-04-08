@@ -10,40 +10,36 @@ from datetime import datetime
 from mavsdk import System
 
 # -----------------------
-# Configurações do Leader-Follower
+# Configurações do Híbrido (VS + APF)
 # -----------------------
 NUM_DRONES = 8
 ALTITUDE = 10.0
 
-KP = 1.0          # Ganho Proporcional do Seguidor (Feedback)
-MAX_STEP = 1.0    # Passo máximo de navegação
+# Ganhos do Campo de Potencial Híbrido
+K_ATT = 3.0      # Força que puxa o drone para o seu "assento" na Estrutura Virtual
+K_REP = 500.0    # Força de repulsão de Obstáculos
+D_OBS = 4.0      # Distância que ele começa a desviar da parede
+MAX_STEP = 1.0   # Passo máximo
 
-# Obstáculos Virtuais no plano NED (Apenas para o Logger medir a colisão)
+# Obstáculos Virtuais no plano NED
 RAIO_CILINDRO = 1.5   
 OBSTACULOS_ESTATICOS = [
-    np.array([20.0, 0.0]), 
-    np.array([20.0, 7.0]), 
-    np.array([20.0, -7.0]),
-    np.array([24.0, 3.5]), 
-    np.array([24.0, -3.5]), 
-    np.array([24.0, 10.5]),
-    np.array([24.0, -10.5]), 
-    np.array([28.0, 0.0]), 
-    np.array([28.0, 7.0]),
+    np.array([20.0, 0.0]), np.array([20.0, 7.0]), np.array([20.0, -7.0]),
+    np.array([24.0, 3.5]), np.array([24.0, -3.5]), np.array([24.0, 10.5]),
+    np.array([24.0, -10.5]), np.array([28.0, 0.0]), np.array([28.0, 7.0]),
     np.array([28.0, -7.0])
 ]
 
-# Definição da Formação em "V" (NED: Norte, Leste)
-# Norte negativo significa ficar atrás do líder
-DESIRED_OFFSETS = {
-    0: np.array([0.0, 0.0]),    # Líder (Ponta do V)
-    1: np.array([-3.0, -3.0]),  # Seguidor 1 (Esquerda)
-    2: np.array([-3.0, 3.0]),   # Seguidor 2 (Direita)
-    3: np.array([-6.0, -6.0]),  # Seguidor 3 (Esquerda)
-    4: np.array([-6.0, 6.0]),   # Seguidor 4 (Direita)
-    5: np.array([-9.0, -9.0]),  # Seguidor 5 (Esquerda)
-    6: np.array([-9.0, 9.0]),   # Seguidor 6 (Direita)
-    7: np.array([-12.0, -12.0]) # Seguidor 7 (Esquerda extra)
+# Geometria da Estrutura Virtual (Formação em V)
+OFFSETS_VS = {
+    0: np.array([0.0, 0.0]),      # Bico da Seta
+    1: np.array([-3.0, 3.0]),     # Asa Direita
+    2: np.array([-3.0, -3.0]),    # Asa Esquerda
+    3: np.array([-6.0, 6.0]),     
+    4: np.array([-6.0, -6.0]),    
+    5: np.array([-9.0, 9.0]),     
+    6: np.array([-9.0, -9.0]),    
+    7: np.array([-12.0, 0.0])     # Cauda
 }
 
 # -----------------------
@@ -65,6 +61,52 @@ def ned_to_gps(n, e):
     d_lat = n / EARTH_RADIUS
     d_lon = e / (EARTH_RADIUS * math.cos(ref_lat_rad))
     return REF_LAT + math.degrees(d_lat), REF_LON + math.degrees(d_lon)
+
+def calcular_forcas_hibridas(pos_atual, pos_alvo_virtual, outras_posicoes, obstaculos):
+    # 1. Atração para o "Assento" na Estrutura Virtual
+    vetor_atracao = pos_alvo_virtual - pos_atual
+    distancia_alvo = np.linalg.norm(vetor_atracao)
+    
+    if distancia_alvo > 0.1:
+        f_att = K_ATT * (vetor_atracao / distancia_alvo)
+    else:
+        f_att = np.array([0.0, 0.0])
+        
+    f_rep = np.array([0.0, 0.0])
+    
+    # 2. Repulsão dos Obstáculos
+    for p_obs in obstaculos:
+        vetor_distancia = pos_atual - p_obs
+        if abs(vetor_distancia[1]) < 0.2 and abs(vetor_distancia[0]) > 0:
+            vetor_distancia[1] += 0.5 # Desempate colinear
+            
+        distancia = np.linalg.norm(vetor_distancia)
+        dist_borda = distancia - RAIO_CILINDRO
+        if dist_borda < 0.1: dist_borda = 0.1
+        
+        if distancia < D_OBS: 
+            termo1 = (1.0 / dist_borda) - (1.0 / (D_OBS - RAIO_CILINDRO))
+            termo2 = 1.0 / (dist_borda**3)
+            f_rep += K_REP * termo1 * termo2 * (vetor_distancia / distancia)
+
+    # 3. Repulsão Inter-Robôs (Para não colidirem quando a formação se quebrar)
+    D_DRONE = 2.0 
+    for p_drone in outras_posicoes:
+        vetor_distancia = pos_atual - p_drone
+        distancia = np.linalg.norm(vetor_distancia)
+        
+        if 0.1 < distancia < D_DRONE: 
+            termo1 = (1.0 / distancia) - (1.0 / D_DRONE)
+            termo2 = 1.0 / (distancia**3)
+            f_rep += (K_REP * 0.2) * termo1 * termo2 * vetor_distancia
+
+    f_total = f_att + f_rep
+    
+    norma_f = np.linalg.norm(f_total)
+    if norma_f > MAX_STEP:
+        f_total = (f_total / norma_f) * MAX_STEP
+        
+    return f_total
 
 # -----------------------
 # Funções do MAVSDK (Worker)
@@ -106,7 +148,7 @@ def process_runner(*args):
     asyncio.run(worker_loop(*args))
 
 # -----------------------
-# Controlador Principal Leader-Follower
+# Controlador Principal
 # -----------------------
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
@@ -116,7 +158,7 @@ if __name__ == "__main__":
     events_ready = [mp.Event() for _ in range(NUM_DRONES)]
     start_all = mp.Event()
 
-    print(f"--- Inicializando Arquitetura Leader-Follower para {NUM_DRONES} Drones ---")
+    print(f"--- Inicializando Arquitetura HÍBRIDA (VS + APF) para {NUM_DRONES} Drones ---")
     processes = []
     for i in range(NUM_DRONES):
         p = mp.Process(target=process_runner, args=(i, f"udp://:{14540+i}", 50050+i, queues_cmd[i], queues_resp[i], events_ready[i], start_all))
@@ -125,19 +167,32 @@ if __name__ == "__main__":
 
     for ev in events_ready: ev.wait()
 
-    print("\n🚀 Decolando enxame e aguardando estabilização...")
+    print("\n🚀 Decolando enxame...")
     for q in queues_cmd: q.put(("takeoff", ALTITUDE))
     start_all.set()
-    time.sleep(15)
+    time.sleep(15) 
 
-    # O Objetivo do Líder é ir para 40m ao Norte
-    P_GOAL = np.array([40.0, 0.0])
+    # --- FASE 1: Montagem da Formação ---
+    print("\n📐 FASE 1: Montando a Formação em 'V' na origem...")
+    PV_ATUAL = np.array([0.0, 0.0]) # Centro virtual inicia na origem
+    
+    for i in range(NUM_DRONES):
+        alvo_montagem = PV_ATUAL + OFFSETS_VS[i]
+        t_lat, t_lon = ned_to_gps(alvo_montagem[0], alvo_montagem[1])
+        queues_cmd[i].put(("goto", (t_lat, t_lon, ALTITUDE)))
 
-    print("\n🎯 INICIANDO LEADER-FOLLOWER")
-    print(f"Líder (Drone 0) vai para {P_GOAL}. Seguidores manterão formação em V.")
+    time.sleep(10) # Aguarda formar o V antes de avançar
 
+    # --- FASE 2: Migração Híbrida ---
+    P_GOAL_NED = np.array([40.0, 0.0])
+    VIRTUAL_STEP = 0.8 # Velocidade da nave fantasma
+    
+    ALVOS_FINAIS = {i: P_GOAL_NED + OFFSETS_VS[i] for i in range(NUM_DRONES)}
+
+    print(f"\n🛸 FASE 2: Movendo Estrutura para {P_GOAL_NED}. APF ativado para evasão!")
+    
     # ---------------------------------------------------------
-    # INICIALIZAÇÃO DO RASTREAMENTO DE MÉTRICAS E BENCHMARK
+    # INICIALIZAÇÃO DO RASTREAMENTO DE MÉTRICAS (DATA LOGGER E BENCHMARK)
     # ---------------------------------------------------------
     dados_log = [] 
     distancia_percorrida = {i: 0.0 for i in range(NUM_DRONES)}
@@ -152,13 +207,13 @@ if __name__ == "__main__":
 
     tempo_inicio_missao = time.time()
     chegaram = [False] * NUM_DRONES
-
-    # Loop de Controle
+    
     while not all(chegaram):
         tempo_atual = time.time() - tempo_inicio_missao
         posicoes_atuais_ned = {}
+        erros_de_rastreamento = [] # Mede o quanto os drones estão fora da formação
         
-        # 1. Coletar e logar posições
+        # 1. Obter posições
         for i in range(NUM_DRONES):
             queues_cmd[i].put(("getpos", None))
             while queues_resp[i].qsize() > 1: queues_resp[i].get_nowait()
@@ -166,7 +221,8 @@ if __name__ == "__main__":
             lat, lon, _ = queues_resp[i].get()[1]
             pos_ned = gps_to_ned(lat, lon)
             posicoes_atuais_ned[i] = pos_ned
-
+            
+            # Atualização de métricas de voo
             if posicao_anterior[i] is not None:
                 distancia_percorrida[i] += np.linalg.norm(pos_ned - posicao_anterior[i])
             posicao_anterior[i] = pos_ned
@@ -176,85 +232,81 @@ if __name__ == "__main__":
                 d = np.linalg.norm(pos_ned - obs)
                 if d < min_dist_neste_instante:
                     min_dist_neste_instante = d
-            
             if min_dist_neste_instante < menor_distancia_obstaculo[i]:
                 menor_distancia_obstaculo[i] = min_dist_neste_instante
 
             dados_log.append([tempo_atual, i, pos_ned[0], pos_ned[1], distancia_percorrida[i], min_dist_neste_instante])
 
-            # Condição de chegada baseada na posição virtual que ele deveria estar
-            alvo_virtual_i = P_GOAL + DESIRED_OFFSETS[i]
-            dist_ao_alvo = np.linalg.norm(alvo_virtual_i - pos_ned)
-            if dist_ao_alvo < 2.0:
+            # Calcula se chegou no alvo absoluto final
+            if np.linalg.norm(ALVOS_FINAIS[i] - pos_ned) < 1.5:
                 chegaram[i] = True
-
-        # 2. Calcular a Lei de Controle Leader-Follower (Com Cronômetro)
-        novas_posicoes_ned = {}
-        tempo_matematica_iteracao = 0.0
-
-        # --- INÍCIO DO CRONÔMETRO (MATEMÁTICA LF) ---
-        t_inicio = time.perf_counter()
-        
-        # A) CÁLCULO DO LÍDER (ID 0)
-        p_L = posicoes_atuais_ned[0]
-        f_goal = P_GOAL - p_L
-        dist_goal = np.linalg.norm(f_goal)
-        
-        if dist_goal > 0.1:
-            u_L = (f_goal / dist_goal) * MAX_STEP
-        else:
-            u_L = np.array([0.0, 0.0])
-            
-        novas_posicoes_ned[0] = p_L + u_L
-
-        # B) CÁLCULO DOS SEGUIDORES (ID 1 a 7)
-        for i in range(1, NUM_DRONES):
-            p_i = posicoes_atuais_ned[i]
-            
-            # Posição desejada = Posição atual do Líder + Offset da Formação
-            p_d = p_L + DESIRED_OFFSETS[i]
-            
-            # Erro de rastreamento
-            erro = p_d - p_i
-            
-            # Lei de Controle (Feedforward do Líder + Feedback do Erro)
-            u_i = u_L + (KP * erro)
-            
-            norm_u = np.linalg.norm(u_i)
-            if norm_u > MAX_STEP:
-                u_i = (u_i / norm_u) * MAX_STEP
                 
-            novas_posicoes_ned[i] = p_i + u_i
+            # Calcula o quão longe ele está do seu assento na estrutura móvel atual
+            assento_virtual = PV_ATUAL + OFFSETS_VS[i]
+            erros_de_rastreamento.append(np.linalg.norm(pos_ned - assento_virtual))
 
-        t_fim = time.perf_counter()
-        # --- FIM DO CRONÔMETRO ---
+        # --- LÓGICA DO FANTASMA ADAPTATIVO ---
+        # Se os drones estão lutando contra obstáculos e ficaram para trás (erro médio > 4.5m),
+        # a Estrutura Virtual "espera" por eles parando de avançar.
+        erro_medio_formacao = np.mean(erros_de_rastreamento)
+        if erro_medio_formacao < 4.5:
+            f_goal_virtual = P_GOAL_NED - PV_ATUAL
+            dist_virtual = np.linalg.norm(f_goal_virtual)
+            if dist_virtual > 0.1:
+                PV_ATUAL += (f_goal_virtual / dist_virtual) * min(VIRTUAL_STEP, dist_virtual)
+            else:
+                PV_ATUAL = P_GOAL_NED
 
-        tempo_matematica_iteracao = (t_fim - t_inicio) * 1000.0
+        # 2. Calcular Forças Híbridas (Com Cronômetro)
+        tempo_matematica_iteracao = 0.0
+        novas_posicoes_ned = {}
+        
+        for i in range(NUM_DRONES):
+            if chegaram[i]:
+                novas_posicoes_ned[i] = posicoes_atuais_ned[i]
+                continue 
+                
+            p_i = posicoes_atuais_ned[i]
+            # O objetivo do APF não é o final do mapa, é o assento na Estrutura Virtual!
+            assento_virtual_i = PV_ATUAL + OFFSETS_VS[i]
+            outros_drones = [posicoes_atuais_ned[j] for j in range(NUM_DRONES) if j != i]
+            
+            # --- INÍCIO DO CRONÔMETRO ---
+            t_inicio = time.perf_counter()
+            forca_resultante = calcular_forcas_hibridas(p_i, assento_virtual_i, outros_drones, OBSTACULOS_ESTATICOS)
+            t_fim = time.perf_counter()
+            # --- FIM DO CRONÔMETRO ---
+            
+            tempo_matematica_iteracao += (t_fim - t_inicio) * 1000.0
+            novas_posicoes_ned[i] = p_i + forca_resultante
+
+        # Registra métricas computacionais
         if tempo_matematica_iteracao > 0:
             tempos_de_calculo_ms.append(tempo_matematica_iteracao)
             cpu_usada_list.append(processo_atual.cpu_percent())
             ram_usada_list.append(processo_atual.memory_info().rss / (1024 * 1024))
 
-        # 3. Enviar os Comandos de Movimento
+        # 3. Mover
         for i in range(NUM_DRONES):
+            if chegaram[i]: continue
             prox_ned = novas_posicoes_ned[i]
             prox_lat, prox_lon = ned_to_gps(prox_ned[0], prox_ned[1])
             queues_cmd[i].put(("goto", (prox_lat, prox_lon, ALTITUDE)))
-            
+
         time.sleep(0.2)
 
     tempo_total = time.time() - tempo_inicio_missao
-    print("\n✅ O Líder chegou ao objetivo e a formação estabilizou!")
+    print("\n✅ O Enxame Híbrido superou os obstáculos e reconstruiu a formação no alvo!")
     
     # ---------------------------------------------------------
-    # CÁLCULO DAS MÉTRICAS COMPUTACIONAIS
+    # CÁLCULO DAS MÉTRICAS COMPUTACIONAIS E EXPORTAÇÃO
     # ---------------------------------------------------------
     media_calc_ms = sum(tempos_de_calculo_ms) / len(tempos_de_calculo_ms) if tempos_de_calculo_ms else 0
     max_calc_ms = max(tempos_de_calculo_ms) if tempos_de_calculo_ms else 0
     media_cpu = sum(cpu_usada_list) / len(cpu_usada_list) if cpu_usada_list else 0
     max_ram = max(ram_usada_list) if ram_usada_list else 0
 
-    NOME_ALGORITMO = "Leader-Follower"
+    NOME_ALGORITMO = "Híbrido (VS+APF)"
     arquivo_benchmark = "comparativo_computacional.csv"
     arquivo_existe = os.path.isfile(arquivo_benchmark)
 
@@ -264,9 +316,6 @@ if __name__ == "__main__":
             escritor_bench.writerow(["Algoritmo", "Num_Drones", "Media_Calc_ms", "Pico_Calc_ms", "Media_CPU_Perc", "Pico_RAM_MB", "Tempo_Missao_s"])
         escritor_bench.writerow([NOME_ALGORITMO, NUM_DRONES, round(media_calc_ms, 4), round(max_calc_ms, 4), round(media_cpu, 2), round(max_ram, 2), round(tempo_total, 2)])
 
-    # ---------------------------------------------------------
-    # EXPORTAÇÃO DOS DADOS E RELATÓRIO FINAL
-    # ---------------------------------------------------------
     nome_arquivo_timestamp = f"resultados.csv"
     with open(nome_arquivo_timestamp, mode='w', newline='') as arquivo_csv:
         escritor = csv.writer(arquivo_csv)
@@ -276,10 +325,11 @@ if __name__ == "__main__":
     nome_arquivo_txt = f"relatorio.txt"
 
     relatorio = "\n" + "="*50 + "\n"
-    relatorio += "📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (LEADER-FOLLOWER)\n"
+    relatorio += "📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (HÍBRIDO VS+APF)\n"
     relatorio += "="*50 + "\n"
     relatorio += f"⏱️ Tempo Total de Convergência: {tempo_total:.2f} segundos\n"
-    relatorio += f"💾 Arquivos salvos: {nome_arquivo_timestamp} e {nome_arquivo_txt}\n"
+    relatorio += f"💾 Arquivo de log (CSV) salvo como: {nome_arquivo_timestamp}\n"
+    relatorio += f"📝 Relatório salvo como: {nome_arquivo_txt}\n"
     relatorio += f"📈 Benchmark Global atualizado: {arquivo_benchmark}\n"
     relatorio += "-" * 50 + "\n"
     
@@ -303,7 +353,7 @@ if __name__ == "__main__":
     with open(nome_arquivo_txt, "w", encoding="utf-8") as arquivo_txt:
         arquivo_txt.write(relatorio)
 
-    print("🛬 Pousando...")
+    print("🛬 Pousando em formação...")
     for q in queues_cmd: q.put(("land", None))
     time.sleep(10)
     for q in queues_cmd: q.put(("exit", None))

@@ -2,7 +2,7 @@
 ==================================================
 📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (APF)
 ==================================================
-⏱️  Tempo Total de Convergência: 177.80 segundos
+⏱️ Tempo Total de Convergência: 177.80 segundos
 💾 Arquivo de log salvo como: resultados_apf_20260330_120628.csv
 📝 Relatório salvo como: relatorio.txt
 --------------------------------------------------

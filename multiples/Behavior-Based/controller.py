@@ -317,7 +317,7 @@ if __name__ == "__main__":
     relatorio = "\n" + "="*50 + "\n"
     relatorio += "📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (BEHAVIOR-BASED)\n"
     relatorio += "="*50 + "\n"
-    relatorio += f"⏱️  Tempo Total de Convergência: {tempo_total:.2f} segundos\n"
+    relatorio += f"⏱️ Tempo Total de Convergência: {tempo_total:.2f} segundos\n"
     relatorio += f"💾 Arquivo de log (CSV) salvo como: {nome_arquivo_timestamp}\n"
     relatorio += f"📝 Relatório salvo como: {nome_arquivo_txt}\n"
     relatorio += f"📈 Benchmark Global atualizado: {arquivo_benchmark}\n"

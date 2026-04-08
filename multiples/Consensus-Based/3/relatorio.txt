@@ -2,7 +2,7 @@
 ==================================================
 📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (CONSENSUS)
 ==================================================
-⏱️  Tempo Total de Convergência: 109.34 segundos
+⏱️ Tempo Total de Convergência: 109.34 segundos
 💾 Arquivos salvos: resultados_20260401_124228.csv e relatorio.txt
 📈 Benchmark Global atualizado: comparativo_computacional.csv
 --------------------------------------------------

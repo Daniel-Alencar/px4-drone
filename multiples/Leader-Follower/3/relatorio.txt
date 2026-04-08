@@ -2,7 +2,7 @@
 ==================================================
 📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (LEADER-FOLLOWER)
 ==================================================
-⏱️  Tempo Total de Convergência: 111.22 segundos
+⏱️ Tempo Total de Convergência: 111.22 segundos
 💾 Arquivos salvos: resultados_20260401_122611.csv e relatorio.txt
 📈 Benchmark Global atualizado: comparativo_computacional.csv
 --------------------------------------------------

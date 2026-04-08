@@ -2,7 +2,7 @@
 ==================================================
 📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (BEHAVIOR-BASED)
 ==================================================
-⏱️  Tempo Total de Convergência: 150.49 segundos
+⏱️ Tempo Total de Convergência: 150.49 segundos
 💾 Arquivo de log (CSV) salvo como: resultados.csv
 📝 Relatório salvo como: relatorio.txt
 📈 Benchmark Global atualizado: comparativo_computacional.csv
