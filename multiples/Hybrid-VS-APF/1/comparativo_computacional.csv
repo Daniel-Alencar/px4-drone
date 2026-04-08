@@ -1,0 +1,3 @@
+Algoritmo,Num_Drones,Media_Calc_ms,Pico_Calc_ms,Media_CPU_Perc,Pico_RAM_MB,Tempo_Missao_s
+Switching (VS -> APF -> VS),8,0.7318,3.2613,1.7,52.39,113.33
+Switching (VS -> APF -> VS),8,0.7645,3.9947,1.93,52.52,121.46
