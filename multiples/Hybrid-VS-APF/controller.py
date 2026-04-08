@@ -15,22 +15,27 @@ from mavsdk import System
 NUM_DRONES = 8
 ALTITUDE = 10.0
 
-# Gatilho da Máquina de Estados
-# Se um obstáculo chegar a menos de 3.5m, o drone liga o APF
-DISTANCIA_GATILHO_APF = 3.5
+# Gatilho da Máquina de Estados AUMENTADO (Eles reagem mais cedo)
+DISTANCIA_GATILHO_APF = 5.0  
 
-# Ganhos do APF (Restaurados IGUAIS ao seu APF Puro)
-K_ATT = 5.0      
-K_REP = 500.0    
-D_OBS = 3.0      
+# Ganhos do APF (Mais agressivo para evitar o emaranhado)
+K_ATT = 5.0      # Atração suave para o assento virtual
+K_REP = 500.0    # Repulsão MUITO forte contra a parede
+D_OBS = 3.0      # Raio de influência da parede igual ao gatilho
 MAX_STEP = 1.0   
 
 # Obstáculos Virtuais no plano NED
 RAIO_CILINDRO = 1.5   
 OBSTACULOS_ESTATICOS = [
-    np.array([20.0, 0.0]), np.array([20.0, 7.0]), np.array([20.0, -7.0]),
-    np.array([24.0, 3.5]), np.array([24.0, -3.5]), np.array([24.0, 10.5]),
-    np.array([24.0, -10.5]), np.array([28.0, 0.0]), np.array([28.0, 7.0]),
+    np.array([20.0, 0.0]), 
+    np.array([20.0, 7.0]), 
+    np.array([20.0, -7.0]),
+    np.array([24.0, 3.5]), 
+    np.array([24.0, -3.5]), 
+    np.array([24.0, 10.5]),
+    np.array([24.0, -10.5]), 
+    np.array([28.0, 0.0]), 
+    np.array([28.0, 7.0]),
     np.array([28.0, -7.0])
 ]
 
@@ -67,7 +72,7 @@ def ned_to_gps(n, e):
     return REF_LAT + math.degrees(d_lat), REF_LON + math.degrees(d_lon)
 
 def calcular_forca_apf_puro(pos_atual, pos_alvo, outras_posicoes, obstaculos):
-    """ Exatamente a mesma matemática do APF que funcionou nos seus testes! """
+    """ Matemática APF turbinada para evitar emaranhados """
     vetor_atracao = pos_alvo - pos_atual
     distancia_alvo = np.linalg.norm(vetor_atracao)
     
@@ -78,6 +83,7 @@ def calcular_forca_apf_puro(pos_atual, pos_alvo, outras_posicoes, obstaculos):
         
     f_rep = np.array([0.0, 0.0])
     
+    # Repulsão das Paredes
     for p_obs in obstaculos:
         vetor_distancia = pos_atual - p_obs
         if abs(vetor_distancia[1]) < 0.2 and abs(vetor_distancia[0]) > 0:
@@ -90,6 +96,7 @@ def calcular_forca_apf_puro(pos_atual, pos_alvo, outras_posicoes, obstaculos):
             termo2 = 1.0 / (distancia**3)
             f_rep += K_REP * termo1 * termo2 * vetor_distancia
 
+    # Repulsão Inter-Robôs AUMENTADA para Drones 4 e 7 não baterem
     D_DRONE = 1.8 
     for p_drone in outras_posicoes:
         vetor_distancia = pos_atual - p_drone
@@ -97,7 +104,7 @@ def calcular_forca_apf_puro(pos_atual, pos_alvo, outras_posicoes, obstaculos):
         if 0.1 < distancia < D_DRONE: 
             termo1 = (1.0 / distancia) - (1.0 / D_DRONE)
             termo2 = 1.0 / (distancia**3)
-            f_rep += (K_REP * 0.5) * termo1 * termo2 * vetor_distancia
+            f_rep += (K_REP * 0.8) * termo1 * termo2 * vetor_distancia
 
     f_total = f_att + f_rep
     norma_f = np.linalg.norm(f_total)
@@ -180,13 +187,18 @@ if __name__ == "__main__":
 
     time.sleep(10)
 
-    P_GOAL_NED = np.array([80.0, 0.0])
-    VIRTUAL_STEP = 0.8 # Velocidade do Centro da Estrutura
+    # --- DEFINIÇÃO DOS PONTOS DE INTERESSE ---
+    WAYPOINT_NED = np.array([40.0, 0.0]) # Ponto de Parada pós-obstáculos
+    P_GOAL_NED = np.array([80.0, 0.0])   # Destino Final
+
+    # O Fantasma começa indo para os 40m
+    ALVO_VIRTUAL_ATUAL = WAYPOINT_NED.copy()
+    
+    VIRTUAL_STEP = 0.8 
     ALVOS_FINAIS = {i: P_GOAL_NED + OFFSETS_VS[i] for i in range(NUM_DRONES)}
 
-    print(f"\n🛸 FASE 2: Movendo Estrutura para {P_GOAL_NED}. Modos: VS ou APF dependendo do ambiente.")
+    print(f"\n🛸 FASE 2: Rumo ao Waypoint {WAYPOINT_NED}. Modos: VS ou APF dependendo do ambiente.")
     
-    # Rastreamento e Benchmarks
     dados_log = [] 
     distancia_percorrida = {i: 0.0 for i in range(NUM_DRONES)}
     posicao_anterior = {i: None for i in range(NUM_DRONES)}
@@ -204,6 +216,7 @@ if __name__ == "__main__":
     while not all(chegaram):
         tempo_atual = time.time() - tempo_inicio_missao
         posicoes_atuais_ned = {}
+        erros_de_rastreamento = [] 
         
         # 1. Obter posições
         for i in range(NUM_DRONES):
@@ -228,18 +241,35 @@ if __name__ == "__main__":
 
             dados_log.append([tempo_atual, i, pos_ned[0], pos_ned[1], distancia_percorrida[i], min_dist_neste_instante])
 
-            # Verifica chegada no alvo absoluto (Assento Final no final da corrida)
+            # Verifica chegada no alvo absoluto FINAL do drone
             if np.linalg.norm(ALVOS_FINAIS[i] - pos_ned) < 1.5:
                 chegaram[i] = True
+                
+            assento_virtual = PV_ATUAL + OFFSETS_VS[i]
+            erros_de_rastreamento.append(np.linalg.norm(pos_ned - assento_virtual))
 
-        # O CENTRO VIRTUAL NUNCA PARA! 
-        # Ele avança inexoravelmente em direção ao objetivo Global
-        f_goal_virtual = P_GOAL_NED - PV_ATUAL
+        # --- A MÁGICA DO WAYPOINT ADAPTATIVO ---
+        erro_medio_formacao = np.mean(erros_de_rastreamento)
+        
+        if erro_medio_formacao < 3.0:
+            velocidade_fantasma = VIRTUAL_STEP
+        elif erro_medio_formacao < 8.0:
+            velocidade_fantasma = VIRTUAL_STEP * 0.5  # Desacelera para esperar a equipe
+        else:
+            velocidade_fantasma = VIRTUAL_STEP * 0.2  # Quase parando, mas ainda puxando para frente
+
+        # NOVO: Checa se o Fantasma chegou no Waypoint (40m) e se a equipe remontou a Seta perfeitamente
+        if np.linalg.norm(ALVO_VIRTUAL_ATUAL - PV_ATUAL) < 0.1 and erro_medio_formacao < 1.5:
+            if np.array_equal(ALVO_VIRTUAL_ATUAL, WAYPOINT_NED):
+                print(f"\n✨ Formação Perfeita restabelecida no Waypoint! Retomando viagem para {P_GOAL_NED}...")
+                ALVO_VIRTUAL_ATUAL = P_GOAL_NED # Libera a corrida final até os 80m
+
+        f_goal_virtual = ALVO_VIRTUAL_ATUAL - PV_ATUAL
         dist_virtual = np.linalg.norm(f_goal_virtual)
         if dist_virtual > 0.1:
-            PV_ATUAL += (f_goal_virtual / dist_virtual) * min(VIRTUAL_STEP, dist_virtual)
+            PV_ATUAL += (f_goal_virtual / dist_virtual) * min(velocidade_fantasma, dist_virtual)
         else:
-            PV_ATUAL = P_GOAL_NED
+            PV_ATUAL = ALVO_VIRTUAL_ATUAL
 
         # 2. CHAVEAMENTO DE MODOS (MÁQUINA DE ESTADOS)
         tempo_matematica_iteracao = 0.0
@@ -254,23 +284,19 @@ if __name__ == "__main__":
                 continue 
                 
             p_i = posicoes_atuais_ned[i]
-            # O assento virtual do drone 'i' neste exato instante
             assento_virtual_i = PV_ATUAL + OFFSETS_VS[i]
             
-            # Verifica qual o obstáculo mais próximo
+            # Distância para o obstáculo mais próximo
             dist_obstaculo_mais_proximo = min([np.linalg.norm(p_i - obs) for obs in OBSTACULOS_ESTATICOS]) if OBSTACULOS_ESTATICOS else float('inf')
 
             # --- O "INTERRUPTOR" DE ALGORITMOS ---
             if dist_obstaculo_mais_proximo < DISTANCIA_GATILHO_APF:
-                # 🛑 MODO APF (SOBREVIVÊNCIA)
-                # Dica de Ouro: O alvo atrativo NÃO é o assento virtual. 
-                # É o destino FINAL do mapa, para arrastar o drone para a frente!
+                # 🛑 MODO APF: O alvo do APF agora é o ASSENTO VIRTUAL (que está em movimento)
                 outros_drones = [posicoes_atuais_ned[j] for j in range(NUM_DRONES) if j != i]
-                forca = calcular_forca_apf_puro(p_i, ALVOS_FINAIS[i], outros_drones, OBSTACULOS_ESTATICOS)
+                forca = calcular_forca_apf_puro(p_i, assento_virtual_i, outros_drones, OBSTACULOS_ESTATICOS)
                 novas_posicoes_ned[i] = p_i + forca
             else:
-                # 🟩 MODO VIRTUAL STRUCTURE (CORPO RÍGIDO)
-                # Caminho livre! Voe reto para o seu assento na Estrutura Fantasma.
+                # 🟩 MODO VIRTUAL STRUCTURE: Caminho livre, seja um corpo rígido!
                 novas_posicoes_ned[i] = assento_virtual_i
 
         t_fim = time.perf_counter()
@@ -293,7 +319,7 @@ if __name__ == "__main__":
         time.sleep(0.2)
 
     tempo_total = time.time() - tempo_inicio_missao
-    print("\n✅ Sucesso! A formação quebrou para desviar e se reconstruiu no alvo.")
+    print("\n✅ Sucesso! O Enxame chegou ao destino final em Formação!")
     
     # ---------------------------------------------------------
     # CÁLCULO DAS MÉTRICAS COMPUTACIONAIS E EXPORTAÇÃO
