@@ -49,7 +49,7 @@ for obs in OBSTACULOS_ESTATICOS:
     circulo = patches.Circle((obs[1], obs[0]), RAIO_CILINDRO, color='red', alpha=0.3)
     ax.add_patch(circulo)
 
-plt.title('Trajetória 2D do Enxame (APF)', fontsize=14, fontweight='bold')
+plt.title('Trajetória 2D do Enxame (Leader-Follower)', fontsize=14, fontweight='bold')
 plt.xlabel('Posição Leste (metros)')
 plt.ylabel('Posição Norte (metros)')
 plt.grid(True, linestyle='--', alpha=0.7)
