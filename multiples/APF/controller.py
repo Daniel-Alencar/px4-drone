@@ -27,16 +27,6 @@ MAX_STEP = 1.0
 # Obstáculos Virtuais no plano NED
 RAIO_CILINDRO = 1.5   
 OBSTACULOS_ESTATICOS = [
-<<<<<<< HEAD
-    np.array([20.0, 0.0]), 
-    np.array([20.0, 7.0]), 
-    np.array([20.0, -7.0]),
-    np.array([24.0, 3.5]), 
-    np.array([24.0, -3.5]), 
-    np.array([24.0, 10.5]),
-    np.array([24.0, -10.5]), 
-    np.array([28.0, 0.0]), 
-=======
     np.array([20.0, 0.0]),
     np.array([20.0, 7.0]),
     np.array([20.0, -7.0]),
@@ -45,7 +35,6 @@ OBSTACULOS_ESTATICOS = [
     np.array([24.0, 10.5]),
     np.array([24.0, -10.5]),
     np.array([28.0, 0.0]),
->>>>>>> 13ab0e3bdac14760de0a0b5b2f805d98414085e3
     np.array([28.0, 7.0]),
     np.array([28.0, -7.0])
 ]
