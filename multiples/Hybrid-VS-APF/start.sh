@@ -13,7 +13,7 @@ num_vehicles=8
 model="gz_x500" 
 
 # Mundo do Gazebo desejado
-world="default"
+world="obstacles_world"
 
 # Loop para iniciar cada drone
 for ((i=0; i<num_vehicles; i++)); do
