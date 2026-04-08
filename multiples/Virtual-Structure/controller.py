@@ -13,7 +13,7 @@ from mavsdk import System
 # Configurações da Estrutura Virtual
 # -----------------------
 NUM_DRONES = 8
-ALTITUDE = 10.0 # Ajustado para 10m para igualar aos outros testes
+ALTITUDE = 10.0
 
 # Obstáculos Virtuais no plano NED (Apenas para o Logger medir a colisão)
 RAIO_CILINDRO = 1.5   
@@ -26,15 +26,16 @@ OBSTACULOS_ESTATICOS = [
 
 # Define a geometria da "Estrutura Virtual" (r_i^{VS})
 # Formato de Seta/V. Tupla: (Offset_Norte, Offset_Leste) em metros
+# Norte negativo = atrás do líder
 OFFSETS_VS = {
     0: (0.0, 0.0),      # Posição 0: Bico da Seta (Centro Virtual)
-    1: (-5.0, 5.0),     # Posição 1: Asa Direita
-    2: (-5.0, -5.0),    # Posição 2: Asa Esquerda
-    3: (-10.0, 10.0),   # Posição 3: Asa Direita
-    4: (-10.0, -10.0),  # Posição 4: Asa Esquerda
-    5: (-15.0, 15.0),   # Posição 5: Asa Direita
-    6: (-15.0, -15.0),  # Posição 6: Asa Esquerda
-    7: (-20.0, 0.0)     # Posição 7: Cauda da Seta (Centro-atrás)
+    1: (-3.0, 3.0),     # Posição 1: Asa Direita
+    2: (-3.0, -3.0),    # Posição 2: Asa Esquerda
+    3: (-6.0, 6.0),     # Posição 3: Asa Direita
+    4: (-6.0, -6.0),    # Posição 4: Asa Esquerda
+    5: (-9.0, 9.0),     # Posição 5: Asa Direita
+    6: (-9.0, -9.0),    # Posição 6: Asa Esquerda
+    7: (-12.0, -12.0)   # Posição 7: Cauda da Seta (Centro-atrás)
 }
 
 # -----------------------
@@ -114,7 +115,7 @@ if __name__ == "__main__":
     events_ready = [mp.Event() for _ in range(NUM_DRONES)]
     start_all = mp.Event()
 
-    print(f"--- Inicializando Arquitetura Virtual Structure PURO para {NUM_DRONES} Drones ---")
+    print(f"--- Inicializando Arquitetura Virtual Structure para {NUM_DRONES} Drones ---")
     processes = []
     for i in range(NUM_DRONES):
         p = mp.Process(target=process_runner, args=(i, f"udp://:{14540+i}", 50050+i, queues_cmd[i], queues_resp[i], events_ready[i], start_all))
@@ -123,29 +124,47 @@ if __name__ == "__main__":
 
     for ev in events_ready: ev.wait()
 
-    print("\n🚀 Decolando enxame e aguardando estabilização...")
+    print("\n🚀 Decolando enxame...")
     for q in queues_cmd: q.put(("takeoff", ALTITUDE))
     start_all.set()
     time.sleep(15)
 
-    # --- Definição do Objetivo do Centro Virtual ---
-    # O centro da estrutura virtual (bico da seta) vai para 40m ao Norte
-    P_GOAL_NED = np.array([40.0, 0.0])
-    VIRTUAL_YAW = 0.0 # A estrutura aponta para o Norte
+    # ---------------------------------------------------------
+    # FASE 1: MONTAGEM DA ESTRUTURA (Corpo Rígido na Origem)
+    # ---------------------------------------------------------
+    print("\n📐 FASE 1: Montando a Formação em 'V' na origem...")
+    PV_ATUAL = np.array([0.0, 0.0]) # Centro virtual parado no zero
+    VIRTUAL_YAW = 0.0
 
-    # Calcula a coordenada final absoluta para cada drone na estrutura
-    objetivos_ned = {}
     for i in range(NUM_DRONES):
         offset_n, offset_e = OFFSETS_VS[i]
         rot_n, rot_e = rotate_offset(offset_n, offset_e, VIRTUAL_YAW)
-        objetivos_ned[i] = P_GOAL_NED + np.array([rot_n, rot_e])
+        alvo_montagem_n = PV_ATUAL[0] + rot_n
+        alvo_montagem_e = PV_ATUAL[1] + rot_e
+        
+        t_lat, t_lon = ned_to_gps(alvo_montagem_n, alvo_montagem_e)
+        queues_cmd[i].put(("goto", (t_lat, t_lon, ALTITUDE, VIRTUAL_YAW)))
 
-    print("\n📐 INICIANDO VIRTUAL STRUCTURE")
-    print(f"Movendo Centro Virtual para {P_GOAL_NED}. Drones manterão a forma de Seta (Corpo Rígido).")
+    print("⏳ Aguardando os drones assumirem suas posições na geometria (15s)...")
+    time.sleep(15)
+    print("✅ Estrutura Rígida formada!")
 
     # ---------------------------------------------------------
-    # INICIALIZAÇÃO DO RASTREAMENTO DE MÉTRICAS E BENCHMARK
+    # FASE 2: MIGRAÇÃO (O Corpo Rígido voa até o destino)
     # ---------------------------------------------------------
+    P_GOAL_NED = np.array([80.0, 0.0])
+    VIRTUAL_STEP = 0.8 # Velocidade do Centro Virtual (metros por iteração)
+
+    # Pre-calcula os alvos absolutos finais de cada drone para checar o fim da missão
+    ALVOS_FINAIS = {}
+    for i in range(NUM_DRONES):
+        off_n, off_e = OFFSETS_VS[i]
+        r_n, r_e = rotate_offset(off_n, off_e, VIRTUAL_YAW)
+        ALVOS_FINAIS[i] = P_GOAL_NED + np.array([r_n, r_e])
+
+    print(f"\n🚀 FASE 2: Movendo a Estrutura em bloco para {P_GOAL_NED}...")
+
+    # Variáveis de Log e Benchmark
     dados_log = [] 
     distancia_percorrida = {i: 0.0 for i in range(NUM_DRONES)}
     posicao_anterior = {i: None for i in range(NUM_DRONES)}
@@ -165,7 +184,7 @@ if __name__ == "__main__":
         tempo_atual = time.time() - tempo_inicio_missao
         posicoes_atuais_ned = {}
         
-        # 1. Coletar e logar posições
+        # 1. Coletar e logar posições atuais
         for i in range(NUM_DRONES):
             queues_cmd[i].put(("getpos", None))
             while queues_resp[i].qsize() > 1: queues_resp[i].get_nowait()
@@ -189,27 +208,32 @@ if __name__ == "__main__":
 
             dados_log.append([tempo_atual, i, pos_ned[0], pos_ned[1], distancia_percorrida[i], min_dist_neste_instante])
 
-            # Verifica se chegou na posição que lhe cabe dentro da estrutura final
-            dist_ao_alvo = np.linalg.norm(objetivos_ned[i] - pos_ned)
-            if dist_ao_alvo < 1.5:
+            # Condição de chegada baseada no alvo final absoluto do drone
+            dist_ao_fim = np.linalg.norm(ALVOS_FINAIS[i] - pos_ned)
+            if dist_ao_fim < 1.5:
                 chegaram[i] = True
 
-        # 2. Calcular a Cinemática da Estrutura Virtual (Com Cronômetro)
+        # 2. Cinemática da Estrutura Virtual (Com Cronômetro)
         novas_posicoes_ned = {}
         tempo_matematica_iteracao = 0.0
 
         # --- INÍCIO DO CRONÔMETRO (MATEMÁTICA VS) ---
         t_inicio = time.perf_counter()
         
+        # O Centro Virtual avança em direção ao objetivo Global (40,0)
+        f_goal_virtual = P_GOAL_NED - PV_ATUAL
+        dist_virtual = np.linalg.norm(f_goal_virtual)
+        
+        if dist_virtual > 0.1:
+            PV_ATUAL += (f_goal_virtual / dist_virtual) * min(VIRTUAL_STEP, dist_virtual)
+        else:
+            PV_ATUAL = P_GOAL_NED # Cravou no destino
+
+        # Projeta a posição instantânea de cada drone baseada no PV_ATUAL
         for i in range(NUM_DRONES):
-            if chegaram[i]:
-                novas_posicoes_ned[i] = posicoes_atuais_ned[i]
-                continue
-            
-            # Na Estrutura Virtual, o Autopiloto faz o controle de posição do "corpo rígido".
-            # Nós apenas projetamos a posição final (p_d = p_v + R_v * r_i) 
-            # e enviamos como Setpoint contínuo.
-            novas_posicoes_ned[i] = objetivos_ned[i]
+            offset_n, offset_e = OFFSETS_VS[i]
+            rot_n, rot_e = rotate_offset(offset_n, offset_e, VIRTUAL_YAW)
+            novas_posicoes_ned[i] = PV_ATUAL + np.array([rot_n, rot_e])
 
         t_fim = time.perf_counter()
         # --- FIM DO CRONÔMETRO ---
@@ -220,17 +244,19 @@ if __name__ == "__main__":
             cpu_usada_list.append(processo_atual.cpu_percent())
             ram_usada_list.append(processo_atual.memory_info().rss / (1024 * 1024))
 
-        # 3. Enviar os Comandos de Movimento
+        # 3. Enviar os Comandos de Movimento Atualizados
         for i in range(NUM_DRONES):
+            # Se ele já chegou no destino final, não precisa mais de atualizações
+            if chegaram[i]: continue 
+            
             prox_ned = novas_posicoes_ned[i]
             prox_lat, prox_lon = ned_to_gps(prox_ned[0], prox_ned[1])
-            # Comando absoluto exigido pela Estrutura Virtual
             queues_cmd[i].put(("goto", (prox_lat, prox_lon, ALTITUDE, VIRTUAL_YAW)))
             
-        time.sleep(0.2)
+        time.sleep(0.2) # A cada 0.2s a estrutura "pula" 0.8 metros (Velocidade = 4m/s)
 
     tempo_total = time.time() - tempo_inicio_missao
-    print("\n✅ Estrutura Virtual chegou ao destino! (Verifique colisões no Gazebo)")
+    print("\n✅ Estrutura Virtual inteira chegou ao destino final!")
     
     # ---------------------------------------------------------
     # CÁLCULO DAS MÉTRICAS COMPUTACIONAIS
@@ -264,7 +290,7 @@ if __name__ == "__main__":
     relatorio = "\n" + "="*50 + "\n"
     relatorio += "📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (VIRTUAL STRUCTURE)\n"
     relatorio += "="*50 + "\n"
-    relatorio += f"⏱️  Tempo Total de Convergência: {tempo_total:.2f} segundos\n"
+    relatorio += f"⏱️ Tempo Total de Convergência: {tempo_total:.2f} segundos\n"
     relatorio += f"💾 Arquivos salvos: {nome_arquivo_timestamp} e {nome_arquivo_txt}\n"
     relatorio += f"📈 Benchmark Global atualizado: {arquivo_benchmark}\n"
     relatorio += "-" * 50 + "\n"
@@ -289,7 +315,7 @@ if __name__ == "__main__":
     with open(nome_arquivo_txt, "w", encoding="utf-8") as arquivo_txt:
         arquivo_txt.write(relatorio)
 
-    print("🛬 Pousando...")
+    print("🛬 Pousando em formação...")
     for q in queues_cmd: q.put(("land", None))
     time.sleep(10)
     for q in queues_cmd: q.put(("exit", None))
