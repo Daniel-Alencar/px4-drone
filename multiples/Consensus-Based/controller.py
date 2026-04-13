@@ -24,10 +24,20 @@ MAX_STEP = 1.0
 ADJACENCY_MATRIX = np.ones((NUM_DRONES, NUM_DRONES)) - np.eye(NUM_DRONES)
 
 # Vetores de Formação d_i (NED: Norte, Leste)
-# Drones vão manter um espaçamento de 2 metros no eixo Leste
-DESIRED_OFFSETS = {i: np.array([0.0, float(i * 2)]) for i in range(NUM_DRONES)}
+# Geometria da Estrutura (Formação em V)
+OFFSETS_VS = {
+    0: np.array([0.0, 0.0]),      # Bico da Seta
+    1: np.array([-3.0, 3.0]),     # Asa Direita
+    2: np.array([-3.0, -3.0]),    # Asa Esquerda
+    3: np.array([-6.0, 6.0]),     
+    4: np.array([-6.0, -6.0]),    
+    5: np.array([-9.0, 9.0]),     
+    6: np.array([-9.0, -9.0]),    
+    7: np.array([-12.0, -12.0])
+}
+DESIRED_OFFSETS = OFFSETS_VS
 
-# Obstáculos Virtuais no plano NED (Mantidos apenas para o Logger medir a colisão)
+# Obstáculos Virtuais no plano NED
 OBSTACULOS_ESTATICOS = [
     np.array([20.0, 0.0]), 
     np.array([20.0, 7.0]), 
@@ -125,12 +135,13 @@ if __name__ == "__main__":
     start_all.set()
     time.sleep(15)
 
-    # Define o Objetivo (Linha de Chegada 40m a Norte, mantendo o espaçamento)
+    # Define o Objetivo (Linha de Chegada 40m a Norte, mantendo a Seta)
+    P_GOAL_NED = np.array([40.0, 0.0])
     objetivos_ned = {}
     for i in range(NUM_DRONES):
-        objetivos_ned[i] = np.array([40.0, float(i * 2)])
+        objetivos_ned[i] = P_GOAL_NED + DESIRED_OFFSETS[i]
 
-    print("\n🤝 INICIANDO ALGORITMO DE CONSENSO PURO (Sem repulsão de obstáculos)")
+    print("\n🤝 INICIANDO ALGORITMO DE CONSENSO PURO")
 
     # ---------------------------------------------------------
     # INICIALIZAÇÃO DO RASTREAMENTO DE MÉTRICAS E BENCHMARK
