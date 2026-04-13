@@ -1,0 +1,5 @@
+Algoritmo,Num_Drones,Media_Calc_ms,Pico_Calc_ms,Media_CPU_Perc,Pico_RAM_MB,Tempo_Missao_s
+APF,8,3.7044,19.0256,2.0,52.49,165.53
+Behavior-Based,8,0.7927,4.1374,1.03,52.24,146.82
+Consensus,8,0.3999,1.7308,1.52,52.17,104.13
+Virtual Structure,8,0.0666,0.2125,1.65,51.94,37.98
