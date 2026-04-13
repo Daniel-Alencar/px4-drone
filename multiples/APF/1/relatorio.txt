@@ -2,18 +2,26 @@
 ==================================================
 📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (APF)
 ==================================================
-⏱️ Tempo Total de Convergência: 177.80 segundos
-💾 Arquivo de log salvo como: resultados_apf_20260330_120628.csv
+⏱️ Tempo Total de Convergência: 190.71 segundos
+💾 Arquivo de log (CSV) salvo como: resultados.csv
 📝 Relatório salvo como: relatorio.txt
+📈 Benchmark Global atualizado: comparativo_computacional.csv
 --------------------------------------------------
-Drone 0: Voou 65.61m | Margem Segurança (Obs): 2.02m
-Drone 1: Voou 57.51m | Margem Segurança (Obs): 1.98m
-Drone 2: Voou 54.14m | Margem Segurança (Obs): 2.05m
-Drone 3: Voou 44.72m | Margem Segurança (Obs): 2.06m
-Drone 4: Voou 75.43m | Margem Segurança (Obs): 2.11m
-Drone 5: Voou 66.12m | Margem Segurança (Obs): 1.96m
-Drone 6: Voou 59.77m | Margem Segurança (Obs): 2.03m
-Drone 7: Voou 48.84m | Margem Segurança (Obs): 1.94m
+Drone 0: Voou 60.61m | Margem Segurança (Obs): 1.98m
+Drone 1: Voou 53.80m | Margem Segurança (Obs): 2.09m
+Drone 2: Voou 47.39m | Margem Segurança (Obs): 2.06m
+Drone 3: Voou 44.53m | Margem Segurança (Obs): 2.12m
+Drone 4: Voou 77.84m | Margem Segurança (Obs): 2.06m
+Drone 5: Voou 68.44m | Margem Segurança (Obs): 1.95m
+Drone 6: Voou 81.60m | Margem Segurança (Obs): 1.94m
+Drone 7: Voou 67.88m | Margem Segurança (Obs): 2.05m
 --------------------------------------------------
-📏 Distância média percorrida pelo enxame: 59.02m
+📏 Distância média percorrida pelo enxame: 62.76m
+--------------------------------------------------
+💻 CUSTO COMPUTACIONAL DO ALGORITMO
+--------------------------------------------------
+⏱️ Tempo Médio de Cálculo por Loop: 3.3273 ms
+⚠️ Pico Máximo de Cálculo (Gargalo): 17.4636 ms
+🧠 Uso Médio de CPU do Algoritmo: 2.10%
+📦 Consumo de RAM (Pico): 52.73 MB
 ==================================================
