@@ -1,0 +1,27 @@
+
+==================================================
+📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (SWITCHING VS-APF)
+==================================================
+⏱️ Tempo Total de Convergência: 121.62 segundos
+💾 Arquivo de log (CSV) salvo como: resultados.csv
+📝 Relatório salvo como: relatorio.txt
+📈 Benchmark Global atualizado: comparativo_computacional.csv
+--------------------------------------------------
+Drone 0: Voou 93.26m | Margem Segurança (Obs): 2.12m
+Drone 1: Voou 86.06m | Margem Segurança (Obs): 2.01m
+Drone 2: Voou 88.56m | Margem Segurança (Obs): 2.06m
+Drone 3: Voou 88.17m | Margem Segurança (Obs): 2.07m
+Drone 4: Voou 89.92m | Margem Segurança (Obs): 2.12m
+Drone 5: Voou 90.56m | Margem Segurança (Obs): 2.11m
+Drone 6: Voou 91.09m | Margem Segurança (Obs): 2.08m
+Drone 7: Voou 98.71m | Margem Segurança (Obs): 2.48m
+--------------------------------------------------
+📏 Distância média percorrida pelo enxame: 90.79m
+--------------------------------------------------
+💻 CUSTO COMPUTACIONAL DO ALGORITMO
+--------------------------------------------------
+⏱️ Tempo Médio de Cálculo por Loop: 0.7576 ms
+⚠️ Pico Máximo de Cálculo (Gargalo): 4.6109 ms
+🧠 Uso Médio de CPU do Algoritmo: 1.68%
+📦 Consumo de RAM (Pico): 52.49 MB
+==================================================
