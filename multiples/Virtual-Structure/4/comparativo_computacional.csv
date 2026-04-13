@@ -1,2 +1,2 @@
 Algoritmo,Num_Drones,Media_Calc_ms,Pico_Calc_ms,Media_CPU_Perc,Pico_RAM_MB,Tempo_Missao_s
-Leader-Follower,8,0.1046,2.7383,1.54,52.15,111.22
+Virtual Structure,8,0.0666,0.2125,1.65,51.94,37.98

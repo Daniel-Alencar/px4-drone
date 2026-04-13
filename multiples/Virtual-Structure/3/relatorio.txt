@@ -2,25 +2,25 @@
 ==================================================
 📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (VIRTUAL STRUCTURE)
 ==================================================
-⏱️ Tempo Total de Convergência: 20.85 segundos
+⏱️ Tempo Total de Convergência: 34.98 segundos
 💾 Arquivos salvos: resultados.csv e relatorio.txt
 📈 Benchmark Global atualizado: comparativo_computacional.csv
 --------------------------------------------------
-Drone 0: Voou 38.67m | Margem Segurança (Obs): 0.13m
-Drone 1: Voou 38.67m | Margem Segurança (Obs): 0.51m
-Drone 2: Voou 38.64m | Margem Segurança (Obs): 0.56m
-Drone 3: Voou 38.70m | Margem Segurança (Obs): 1.02m
-Drone 4: Voou 38.73m | Margem Segurança (Obs): 1.02m
-Drone 5: Voou 38.76m | Margem Segurança (Obs): 1.51m
-Drone 6: Voou 38.74m | Margem Segurança (Obs): 1.52m
-Drone 7: Voou 38.75m | Margem Segurança (Obs): 1.51m
+Drone 0: Voou 78.69m | Margem Segurança (Obs): 0.30m
+Drone 1: Voou 78.68m | Margem Segurança (Obs): 0.48m
+Drone 2: Voou 78.71m | Margem Segurança (Obs): 0.53m
+Drone 3: Voou 78.71m | Margem Segurança (Obs): 1.00m
+Drone 4: Voou 78.64m | Margem Segurança (Obs): 1.00m
+Drone 5: Voou 78.62m | Margem Segurança (Obs): 1.54m
+Drone 6: Voou 78.75m | Margem Segurança (Obs): 1.49m
+Drone 7: Voou 78.70m | Margem Segurança (Obs): 1.52m
 --------------------------------------------------
-📏 Distância média percorrida pelo enxame: 38.71m
+📏 Distância média percorrida pelo enxame: 78.69m
 --------------------------------------------------
 💻 CUSTO COMPUTACIONAL DO ALGORITMO
 --------------------------------------------------
-⏱️ Tempo Médio de Cálculo por Loop: 0.0658 ms
-⚠️ Pico Máximo de Cálculo (Gargalo): 0.3610 ms
-🧠 Uso Médio de CPU do Algoritmo: 1.60%
-📦 Consumo de RAM (Pico): 51.77 MB
+⏱️ Tempo Médio de Cálculo por Loop: 0.0622 ms
+⚠️ Pico Máximo de Cálculo (Gargalo): 0.1828 ms
+🧠 Uso Médio de CPU do Algoritmo: 1.71%
+📦 Consumo de RAM (Pico): 51.89 MB
 ==================================================

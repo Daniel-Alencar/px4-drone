@@ -1,0 +1,26 @@
+
+==================================================
+📊 RELATÓRIO DE MÉTRICAS DA MISSÃO (VIRTUAL STRUCTURE)
+==================================================
+⏱️ Tempo Total de Convergência: 37.98 segundos
+💾 Arquivos salvos: resultados.csv e relatorio.txt
+📈 Benchmark Global atualizado: comparativo_computacional.csv
+--------------------------------------------------
+Drone 0: Voou 78.67m | Margem Segurança (Obs): 0.11m
+Drone 1: Voou 78.73m | Margem Segurança (Obs): 0.69m
+Drone 2: Voou 78.73m | Margem Segurança (Obs): 0.63m
+Drone 3: Voou 78.82m | Margem Segurança (Obs): 1.01m
+Drone 4: Voou 78.77m | Margem Segurança (Obs): 0.96m
+Drone 5: Voou 78.81m | Margem Segurança (Obs): 1.43m
+Drone 6: Voou 78.82m | Margem Segurança (Obs): 1.59m
+Drone 7: Voou 78.79m | Margem Segurança (Obs): 1.53m
+--------------------------------------------------
+📏 Distância média percorrida pelo enxame: 78.77m
+--------------------------------------------------
+💻 CUSTO COMPUTACIONAL DO ALGORITMO
+--------------------------------------------------
+⏱️ Tempo Médio de Cálculo por Loop: 0.0666 ms
+⚠️ Pico Máximo de Cálculo (Gargalo): 0.2125 ms
+🧠 Uso Médio de CPU do Algoritmo: 1.65%
+📦 Consumo de RAM (Pico): 51.94 MB
+==================================================

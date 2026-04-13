@@ -35,7 +35,7 @@ OFFSETS_VS = {
     4: (-6.0, -6.0),    # Posição 4: Asa Esquerda
     5: (-9.0, 9.0),     # Posição 5: Asa Direita
     6: (-9.0, -9.0),    # Posição 6: Asa Esquerda
-    7: (-12.0, -12.0)   # Posição 7: Cauda da Seta (Centro-atrás)
+    7: (-12.0, -12.0)
 }
 
 # -----------------------

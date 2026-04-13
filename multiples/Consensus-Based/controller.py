@@ -26,29 +26,29 @@ ADJACENCY_MATRIX = np.ones((NUM_DRONES, NUM_DRONES)) - np.eye(NUM_DRONES)
 # Vetores de Formação d_i (NED: Norte, Leste)
 # Geometria da Estrutura (Formação em V)
 OFFSETS_VS = {
-    0: np.array([0.0, 0.0]),      # Bico da Seta
-    1: np.array([-3.0, 3.0]),     # Asa Direita
-    2: np.array([-3.0, -3.0]),    # Asa Esquerda
-    3: np.array([-6.0, 6.0]),     
-    4: np.array([-6.0, -6.0]),    
-    5: np.array([-9.0, 9.0]),     
-    6: np.array([-9.0, -9.0]),    
-    7: np.array([-12.0, -12.0])
+    0: np.array([-9.0, 9.0]),     
+    1: np.array([-6.0, 6.0]),     
+    2: np.array([-3.0, 3.0]),     # Asa Direita
+    3: np.array([0.0, 0.0]),      # Bico da Seta
+    4: np.array([-12.0, -12.0]),
+    5: np.array([-9.0, -9.0]),    
+    6: np.array([-6.0, -6.0]),    
+    7: np.array([-3.0, -3.0])     # Asa Esquerda
 }
 DESIRED_OFFSETS = OFFSETS_VS
 
 # Obstáculos Virtuais no plano NED
 OBSTACULOS_ESTATICOS = [
-    np.array([20.0, 0.0]), 
-    np.array([20.0, 7.0]), 
-    np.array([20.0, -7.0]),
-    np.array([24.0, 3.5]), 
-    np.array([24.0, -3.5]), 
-    np.array([24.0, 10.5]),
-    np.array([24.0, -10.5]), 
-    np.array([28.0, 0.0]), 
-    np.array([28.0, 7.0]),
-    np.array([28.0, -7.0])
+    # np.array([20.0, 0.0]), 
+    # np.array([20.0, 7.0]), 
+    # np.array([20.0, -7.0]),
+    # np.array([24.0, 3.5]), 
+    # np.array([24.0, -3.5]), 
+    # np.array([24.0, 10.5]),
+    # np.array([24.0, -10.5]), 
+    # np.array([28.0, 0.0]), 
+    # np.array([28.0, 7.0]),
+    # np.array([28.0, -7.0])
 ]
 
 # -----------------------
@@ -273,7 +273,7 @@ if __name__ == "__main__":
     # ---------------------------------------------------------
     # EXPORTAÇÃO DOS DADOS E RELATÓRIO FINAL
     # ---------------------------------------------------------
-    nome_arquivo_timestamp = f"resultados_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    nome_arquivo_timestamp = f"resultados.csv"
     with open(nome_arquivo_timestamp, mode='w', newline='') as arquivo_csv:
         escritor = csv.writer(arquivo_csv)
         escritor.writerow(["Tempo_s", "Drone_ID", "Pos_N_Metros", "Pos_E_Metros", "Distancia_Percorrida_Acumulada_m", "Distancia_Minima_Obstaculo_Instante_m"])
