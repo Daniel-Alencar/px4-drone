@@ -15,8 +15,7 @@ cp worlds/* ~/PX4-Autopilot/Tools/simulation/gz/worlds/
 
 Após a cópia, a estrutura da sua pasta no PX4 deve ficar semelhante a esta:
 
-> `[Insira aqui a Imagem da estrutura de pastas]`
-
+![Diretório dos mundos/cenários no PX4](assets/worlds_directory.png)
 
 ## 🗂️ Estrutura do Repositório
 
