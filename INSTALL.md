@@ -1,4 +1,4 @@
-# Instalação dos softwares para simulação
+# ⚙️ Instalação dos softwares para simulação
 
 # Pré-requisitos
 

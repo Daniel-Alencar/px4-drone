@@ -81,7 +81,7 @@ Este script gerará dois arquivos de imagem:
 1.  O trajeto em si plotado graficamente.
 2.  Um gráfico definindo as distâncias dos drones para os obstáculos mais próximos.
 
-> **Nota:** Dentro da pasta de cada algoritmo, você encontrará subpastas chamadas **`1, 2, 3 e 4 (representado, respectivamente, 'Mundo com obstáculos, Mundo com obstáculos e com vento, Mundo sem obstáculos e Mundo sem obstáculos e com vento')`**. Elas contêm logs e resultados de execuções anteriores validadas em todos os mundos disponíveis.
+> **Nota:** Dentro da pasta de cada algoritmo, você encontrará subpastas chamadas **`1, 2, 3 e 4 (representado, respectivamente, 'a simulação no mundo com obstáculos', 'a simulação no mundo com obstáculos e com vento', 'a simulação no mundo sem obstáculos' e 'a simulação no mundo sem obstáculos e com vento')`**. Elas contêm logs e resultados de execuções anteriores validadas em todos os mundos disponíveis.
 
 ### Comparativo de Custo Computacional
 
